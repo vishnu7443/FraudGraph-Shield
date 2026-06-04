@@ -1,0 +1,341 @@
+SOLUTION APPROACH DOCUMENT
+FraudGraph Shield
+A Graph-AI Powered Real-Time System for Mule Account Detection
+and Suspicious Transaction Intelligence
+Submitted for:
+PSB's Cybersecurity, Fraud & Artificial Intelligence Hackathon 2026
+Bank of India  |  IIT Hyderabad  |  Department of Financial Services, Ministry of Finance
+Problem Statement 2
+AI/ML Solution for Detecting Suspicious Transactions and Mule Accounts
+SRIT Coimbatore  |  June 2026
+1. Executive Summary
+FraudGraph Shield is a dual-engine, real-time fraud intelligence platform purpose-built to address the two most critical gaps in public sector bank fraud defenses: the inability to detect coordinated mule account networks, and the lack of a unified scoring system that fuses cross-channel behavioral signals with regulatory alerts.
+The system combines a Graph Neural Network (GNN) that models money relay topologies across account networks with a high-velocity transaction scorer built on LightGBM. Both engines ingest live Government CFMS/I4C cyber fraud alerts, TMS flags, and cross-channel behavioral data. The output is a composite risk score with full SHAP-based explainability, enabling both automated blocking and analyst-assisted investigation — satisfying RBI regulatory requirements end-to-end.
+Key Claims
+Detection of mule account relay graphs before funds exit the bank ecosystem. Real-time transaction risk scoring in under 150 milliseconds per transaction. Unified ingestion of government CFMS alerts, TMS alerts, and cross-bank data streams. SHAP explainability for every decision — audit-ready and regulator-compliant.
+2. Problem Statement and Context
+2.1 The Mule Account Crisis in Indian Banking
+Mule accounts are legitimate bank accounts — often owned by economically vulnerable individuals — that are recruited or coerced by criminal networks to receive and relay stolen funds. When a UPI/NEFT fraud occurs, the stolen money is rarely sent directly to the fraudster. Instead, it is rapidly hop-forwarded through 3 to 8 mule accounts before being cashed out or converted to cryptocurrency, a technique known as layering.
+According to the Indian Cybercrime Coordination Centre (I4C), over 1.1 lakh mule accounts were frozen across public sector banks between January and October 2024. The National Payments Corporation of India (NPCI) has documented that fraudulent UPI transactions alone crossed Rs. 1,457 crore in FY2024. The Government of India's Citizen Financial Cyber Fraud Reporting and Management System (CFMS) registers over 2,000 new fraud complaints daily, a significant fraction of which involve mule account layering.
+Why Existing Systems Fail
+Rule-based fraud systems (velocity rules, amount thresholds) look at individual accounts in isolation. They cannot see that Account A received Rs. 50,000 from a fraud victim, forwarded Rs. 48,000 to Account B, which forwarded Rs. 45,000 to Account C within 4 hours. This relay graph structure is the signature of mule activity — and it is completely invisible to row-level ML models and rule engines operating on single-account data.
+2.2 Problem Statement Requirements Mapping
+The official Problem Statement 2 specifies four mandatory capabilities. FraudGraph Shield addresses all four explicitly:
+PS2 Requirement
+FraudGraph Shield Response
+Detect suspicious transactions and mule accounts using AI/ML
+Dual Engine: GNN mule graph detector + LightGBM real-time transaction scorer trained on provided dataset (9,082 records, 3,924 features)
+Ingest financial transaction data and fraud monitoring system alerts
+Kafka-based stream processor ingesting CBS transaction feeds, TMS alerts, and internal fraud monitoring system events
+Consume government CFMS/I4C fraud alerts and tickets
+CFMS Alert Enricher module polls I4C REST API, enriches transaction and account records with active fraud ticket indicators in real time
+Prevent circulation of fraudulent proceeds through mule accounts
+Automated account freezing triggered when composite GNN + transaction risk score exceeds configurable threshold; FIU-IND STR filing integration
+Real-time regulatory inputs and cross-channel bank data
+Multi-source ingestion layer handles UPI, NEFT, RTGS, and mobile banking channel signals; RBI regulatory feed ingestion for updated KYC risk indicators
+3. Dataset Analysis
+3.1 Dataset Overview
+The provided dataset (DataSet.csv) contains anonymized behavioral and transactional features representing real bank account activity across multiple product types. The dataset was analyzed comprehensively to understand its structure, identify usable predictive signals, and design appropriate preprocessing pipelines.
+Metric
+Value
+Relevance
+Approach
+Total records
+9,082 accounts
+Sufficient for supervised learning
+No augmentation needed for baseline; SMOTE for class balance
+Total features
+3,924 columns (F1–F3924)
+High-dimensional behavioral fingerprint
+Dimensionality reduction via PCA + SHAP-guided selection
+NA density
+~68% of first 100 features have >50% NA
+Selective missingness = informative signal
+Missingness indicator features + median imputation
+Class distribution (F3897)
+76.9% clean / 19.3% suspicious / 3.8% fraud
+Moderate imbalance
+SMOTE oversampling + class-weighted loss
+Account types
+Savings, Current, MSME Micro, MSME Medium
+Distinct risk profiles per segment
+Segment-specific feature normalization
+Time window structure
+Features repeat in groups of 6 (e.g., F13–F18, F19–F24)
+Multi-window velocity ratios across different lookback periods
+Use all time windows as temporal features for drift detection
+3.2 Key Feature Groups Identified
+Through systematic analysis of the 3,924-column structure, the following semantically meaningful feature groups were identified:
+Feature Group A: Behavioral Velocity Ratios (F1–F3600, approx.)
+The dominant structure consists of repeating 6-column blocks representing behavioral ratios across multiple time windows (1-week, 1-month, 3-month lookbacks based on pattern analysis). These ratios capture how an account's transaction behavior compares to its own historical baseline and to segment peers. Ratio values near 1.0 indicate normal behavior; values significantly above or below 1.0 indicate anomalous velocity.
+Transaction count ratio (actual vs expected)
+Transaction amount ratio (total credited/debited vs baseline)
+Counterparty diversity index (new payees as fraction of total)
+Channel utilization ratio (mobile vs branch vs ATM composition shift)
+Round-amount transaction proportion (indicator of structured transactions)
+Cross-bank transfer proportion (indicator of layering)
+Feature Group B: Account Risk Indicators (F3880–F3899)
+The columns near the end of the feature space encode account-level risk signals derived from historical scoring runs. Analysis revealed:
+F3895–F3896: Credit score bucket (values: 400, 500, 600, 700, 800, 900). 73% of accounts fall in the 600 bucket, representing standard risk; the 400 and 500 buckets show elevated F3897 rates.
+F3897: This column shows a distribution of 76.9% zero, 19.3% one, and 3.8% two-or-above — consistent with a risk tier label (clean / elevated / flagged). This will be used as the primary target variable for supervised training.
+F3880–F3885: Normalized deviation scores (range approximately -1 to +2) representing how far account behavior deviates from segment peers. Strongly negative values (-0.99, -1.0) indicate accounts with no comparable peer behavior — a known anomaly indicator.
+Feature Group C: Account Metadata (F3886–F3924)
+The final columns provide interpretable account characteristics used for segmentation, stratified evaluation, and regulatory reporting:
+Column
+Meaning and Distribution
+F3886
+Account type: Savings (65.6%), Current (22.6%), MSME Micro (3.7%), MSME Medium (0.8%)
+F3888
+Account opening date (from August 2011 onward — account tenure calculable)
+F3891
+Occupation: selfemployed (43.5%), salaried (21.0%), student (13.0%), agriculture (12.2%), housewife (7.3%)
+F3892
+Gender: Male / Female (used for demographic fairness audit)
+F3893
+Segment: RETAIL (majority) / CORPORATE
+F3894
+Age of account holder (integer, range 18–75+)
+F3895–F3896
+Credit score bucket: 600 (73.4%), 700 (17.3%), 500 (4.4%), 400 (2.7%), 900 (1.4%)
+F3897
+Primary risk label (0=clean, 1=suspicious, 2+=fraud flag). Used as training target.
+F3900–F3924
+Binary product ownership flags (loan types, credit card, investment products). Used as account profile features.
+3.3 Class Imbalance Analysis and Strategy
+The dataset exhibits moderate class imbalance with 23.1% of accounts carrying a risk label above zero. Across account types, MSME Medium accounts show the highest suspicious rate (37%) despite small absolute count, while MSME Micro accounts show the lowest (8%) — suggesting distinct risk profiles requiring segment-stratified models.
+The preprocessing strategy uses a combination of Synthetic Minority Oversampling Technique (SMOTE) applied only to training folds during cross-validation, cost-sensitive learning with class weights inversely proportional to class frequency, and stratified k-fold cross-validation with k=5 to preserve class distributions across folds.
+3.4 Feature Engineering Plan
+Beyond the 3,924 raw features, the following derived features will be engineered:
+Account tenure in days (from F3888 account opening date to scoring date)
+Credit score group interactions (e.g., low credit score x high velocity ratio)
+Occupation risk profile (binary mapping of occupation to empirical risk rate from training data)
+Missingness pattern vector (binary mask of NA columns per account — the pattern itself encodes account type and vintage)
+Peer deviation composite (mean of F3880–F3885 absolute deviation scores)
+Product complexity score (count of active product flags from F3900–F3924 — high complexity in short-tenure accounts is anomalous)
+4. Solution Architecture
+4.1 High-Level System Design
+FraudGraph Shield is a four-layer microservices architecture designed for modularity, allowing Bank of India to adopt individual components into its existing Core Banking System (CBS) infrastructure without requiring a complete replacement.
+Architecture Principle
+Each layer can be deployed and tested independently. Layer 1 (ingestion) can run without Layer 2 (detection). Layer 2 engines are independently deployable REST microservices. Layer 3 (fusion) consumes both via message queue. This reduces integration risk for a production bank deployment and allows phased rollout.
+Layer 1: Multi-Source Data Ingestion
+All data streams are normalized into a unified Account Event Record (AER) — a standardized JSON schema — before downstream processing. This abstraction layer decouples detection logic from data source specifics.
+Data Source
+Ingestion Method and Latency Target
+Core Banking System (CBS) transaction feed
+Apache Kafka topic subscription; event published per transaction commit. Target latency: under 50ms from CBS commit to Kafka topic.
+Government CFMS / I4C fraud alert API
+Polling adapter at 60-second intervals. CFMS alert linked to account via mobile number and account number hash. Alert enriches AER with fraud_ticket_flag and cfms_ticket_age_hours fields.
+Internal TMS (Transaction Monitoring System) alerts
+Direct Kafka bridge from TMS alert topic. TMS alert type and severity code mapped to standardized risk_indicator enum.
+FRM (Fraud Risk Management) system alerts
+REST callback registered with FRM. FRM pushes alert payload to FraudGraph Shield ingest endpoint on trigger.
+Cross-channel behavioral aggregates
+Batch job runs at T+15 minutes, aggregating UPI, NEFT, RTGS, mobile banking, and ATM events into account-level velocity counters published to a Redis cache.
+RBI regulatory feeds (KYC risk updates, blacklisted entities)
+Daily batch ingestion from RBI SFTP endpoint. Entity lists stored in PostgreSQL lookup table queried during AER enrichment.
+Layer 2A: Graph Neural Network — Mule Account Network Detector
+This engine models the entire bank's account network as a directed graph and uses a Graph Neural Network to identify accounts that occupy structurally suspicious positions — specifically, accounts that function as relay nodes in money-laundering subgraphs.
+Graph Construction: Nodes represent accounts (one node per account, enriched with account feature vector from the dataset). Directed edges represent transaction flows, weighted by cumulative transferred amount and edge age. The graph is updated incrementally with each new transaction; historical edges beyond a 90-day window are pruned to maintain computational tractability.
+GNN Architecture: The system uses a GraphSAGE (Graph Sample and Aggregation) variant with three message-passing layers. GraphSAGE was selected over Graph Convolutional Networks (GCN) because it supports inductive learning — meaning it can classify newly opened accounts without retraining the entire model. Each layer aggregates feature information from sampled 1-hop, 2-hop, and 3-hop neighborhoods, allowing the model to detect relay patterns spanning up to three transaction hops.
+Node features (per account): 64-dimensional embedding derived from the 3,924-feature dataset via PCA, plus account type, tenure, credit score, occupation risk score, and active CFMS alert flag
+Edge features: Transaction amount (normalized), transaction channel, elapsed time since transaction, and is_same_bank_flag
+Training objective: Semi-supervised node classification using labeled mule accounts (from historical freeze decisions) as positive examples and a random sample of long-tenure, low-velocity accounts as negative examples
+Output: Per-account mule probability score (0.0 to 1.0) and subgraph cluster ID for co-suspicious accounts
+4.1 (Unique Innovation) — Temporal Hop Velocity Signature (THVS)
+Novel Approach: Temporal Hop Velocity Signature
+Most graph-based fraud systems only look at structural topology (who is connected to whom). FraudGraph Shield adds a temporal dimension: the speed at which funds traverse hops. In legitimate transactions, money entering an account stays for hours to days before being forwarded. In mule accounts, the median time-to-forward is under 4 hours, and the amount forwarded is typically 90-98% of the received amount (net of small fees). The THVS feature captures both the hop speed distribution and the amount retention ratio across each account's transaction neighborhood. This signal is unique to this architecture and is not captured by any existing commercial fraud system.
+Layer 2B: Real-Time Transaction Scorer
+The transaction scorer evaluates each individual transaction within milliseconds of submission, producing a risk score that reflects how anomalous the transaction is relative to the account's historical behavior and segment peers.
+Model: LightGBM gradient boosted decision trees with DART (Dropout Additive Regression Trees) sampling, selected for its sub-100ms inference time, native handling of missing values (critical given the 68% NA density in the dataset), and built-in feature importance for SHAP compatibility.
+Feature Category
+Features Used in Scorer
+Transaction-level
+Amount, channel (UPI/NEFT/RTGS/ATM), time of day, day of week, is_round_amount, is_new_counterparty, counterparty_bank_code
+Account velocity (from dataset)
+All time-window ratio features (F13–F3600 velocity blocks), selected via SHAP importance ranking from training
+Account metadata
+Account type, tenure, credit score bucket, occupation risk score, product complexity score, account status (R/SU/M/U)
+Graph-derived features
+Account mule probability from GNN engine (updated every 5 minutes), subgraph risk score of connected accounts
+Regulatory enrichment
+Active CFMS alert flag, CFMS alert age in hours, TMS alert count in last 24 hours, RBI KYC risk tier
+Behavioral deviation
+Peer deviation composite (F3880–F3885), personal baseline deviation, cross-channel shift score
+A second model — an Isolation Forest for unsupervised anomaly detection — runs in parallel as a complementary signal. Transactions flagged by both the LightGBM scorer and the Isolation Forest are immediately escalated to the highest-priority analyst queue regardless of composite score, implementing a fail-safe detection layer for novel fraud patterns not present in training data.
+4.2 (Unique Innovation) — Adaptive Behavioral Baseline with Concept Drift Detection
+Novel Approach: Per-Account Adaptive Baseline
+Standard fraud models are trained once and applied statically until the next retraining cycle. This creates a known blind spot: accounts that gradually shift their behavior to mimic legitimate patterns over months before committing fraud (account aging/warming). FraudGraph Shield implements an online exponential moving average (EMA) baseline per account that updates with every transaction. A Kolmogorov-Smirnov test on the score distribution runs daily to detect concept drift in the population. When drift is detected, the affected account segment is flagged for priority analyst review, and an accelerated retraining job is triggered. This makes the system self-updating without manual intervention.
+Layer 3: Risk Fusion Engine
+The fusion engine combines signals from both detection engines plus regulatory inputs into a single, interpretable composite risk score.
+Composite Score Formula: The composite score is a weighted combination of the GNN mule probability score, the LightGBM transaction risk score, and the regulatory alert severity score. Weights are tuned during validation to optimize for precision at high recall thresholds, prioritizing reduction of false negatives (missed frauds) over false positives (wrongly blocked transactions) for accounts exceeding a moderate risk threshold.
+Composite Score Range
+Automated Action
+0–40 (Low Risk)
+Transaction proceeds normally. Account monitoring continues at standard frequency.
+40–65 (Medium Risk)
+Transaction proceeds. Account flagged for enhanced monitoring. Velocity limits tightened for next 24 hours. Analyst notified for review within 4 hours.
+65–80 (High Risk)
+Transaction held for 15 minutes pending analyst review. If no analyst action, transaction proceeds but account placed on watch list. TMS alert generated.
+80–100 (Critical Risk)
+Transaction blocked immediately. Account frozen pending investigation. FIU-IND Suspicious Transaction Report (STR) filing initiated. CFMS ticket created if not already present.
+Layer 3: SHAP Explainability Module
+For every decision above medium risk, a SHAP (SHapley Additive exPlanations) analysis identifies and ranks the top 5 features driving the score. This explanation is attached to the analyst alert, enabling rapid human decision-making. SHAP explanations also serve as audit evidence for RBI compliance reviews, addressing the model explainability requirements of the RBI Master Direction on Digital Lending and upcoming regulatory guidance on AI use in financial services.
+4.3 (Unique Innovation) — Cross-Bank Mule Identification via I4C Data Federation
+Novel Approach: Federated Mule Intelligence
+Mule account networks routinely span multiple banks. A money relay chain might use one account at Bank of India, one at SBI, and one at HDFC before cashing out. No single bank can see this full picture with its own data alone. FraudGraph Shield proposes a federated graph extension using I4C (Indian Cybercrime Coordination Centre) as the trust anchor. When a transaction targets an account at another bank, the system queries the I4C national mule account registry via a hashed account identifier. If the destination account appears in the I4C registry or has active CFMS tickets, the outgoing transaction is immediately escalated regardless of the originating account's own score. This cross-bank signal is a capability no existing bank-level fraud system provides.
+Layer 4: Feedback and Self-Improvement Loop
+The system includes a structured feedback pipeline that transforms analyst decisions into labeled training examples, enabling continuous model improvement without manual retraining overhead.
+Analyst confirms fraud: Transaction and account record added to positive class training set; account features cached for next retraining cycle
+Analyst clears false positive: Record added to hard-negative training set with elevated sample weight to penalize that feature pattern in future training
+Case outcome confirmed (account prosecuted, PMLA case filed): Record added to high-confidence positive set with 2x sample weight
+Monthly retraining: Full model retraining triggered on first Monday of each month using accumulated labeled data; models promoted to production only if AUC-ROC on holdout test set meets or exceeds current production model performance
+Concept drift trigger: Unscheduled retraining triggered when KS-test p-value drops below 0.05 on any score distribution segment
+5. Technical Methodology
+5.1 Machine Learning Pipeline
+Data Preprocessing
+Load raw dataset (9,082 rows x 3,924 features). Validate schema and row count integrity.
+Handle missing values: For velocity ratio features, replace NA with 0.5 (representing no deviation from baseline, a conservative neutral assumption). For binary flag features, replace NA with 0. Generate a missingness indicator feature vector per account.
+Extract metadata columns (F3886–F3924) as separate interpretable features. Parse F3888 (account opening date) to compute account tenure in days.
+Apply segment-stratified z-score normalization to velocity ratio features separately for each account type to prevent distribution leakage across segments.
+Construct interaction features: credit score bucket x occupaton risk score, account tenure x velocity deviation, CFMS alert flag x transaction risk tier.
+Perform SMOTE on training folds only (never on validation or test folds) to address the 23.1% minority class imbalance.
+Model Training — GNN Mule Detector
+Construct account transaction graph from dataset features using account metadata as node features and inferred transaction relationships from correlated velocity features as edge proxies for the training prototype.
+Train GraphSAGE model with 3 message-passing layers, 128-dimensional hidden embeddings, ReLU activations, and dropout rate of 0.3 for regularization.
+Use semi-supervised node classification loss: Binary cross-entropy on labeled nodes, augmented with an unsupervised graph reconstruction loss on unlabeled nodes.
+Evaluate using node-level AUC-ROC, precision, recall, and F1 score on a 20% held-out test graph partition.
+Model Training — Transaction Scorer
+Perform 5-fold stratified cross-validation with LightGBM. Hyperparameter tuning via Bayesian optimization on validation fold AUC-ROC.
+Key hyperparameters: num_leaves in range 31–127, max_depth in range 4–8, learning_rate in range 0.01–0.1, feature_fraction in range 0.6–0.9, class_weight as balanced.
+Extract SHAP feature importance after final training; select top 200 features by mean absolute SHAP value for production inference to reduce latency.
+Train complementary Isolation Forest on transaction features for unsupervised anomaly detection. contamination parameter set to 0.05 based on estimated fraud prevalence.
+5.2 Evaluation Metrics and Targets
+The system is evaluated against the following primary metrics, chosen to reflect the operational requirements of a bank fraud system where missing a fraud (false negative) is far more costly than incorrectly flagging a transaction (false positive):
+Metric
+Target Value
+Justification
+AUC-ROC (Transaction Scorer)
+Greater than 0.93
+Industry benchmark for production fraud models in Indian banking context
+Recall at 80% Precision (Transaction Scorer)
+Greater than 0.75
+Ensures 75% of actual fraud is caught while maintaining acceptable false positive rate
+False Negative Rate (FNR)
+Below 5%
+Missing fraud is 20x more costly than a false positive (estimated from BOI cost data)
+GNN Mule Detection F1
+Greater than 0.80
+Mule detection is harder due to label scarcity; F1 balances precision and recall equally
+Inference Latency (P99)
+Under 150 milliseconds
+Transaction must be scored before CBS commit timeout (typically 500ms)
+CFMS Alert Match Rate
+Greater than 60%
+Fraction of CFMS-reported fraud accounts that were pre-flagged by the system
+5.3 Technology Stack
+Component
+Technology Choice and Rationale
+GNN Framework
+PyTorch Geometric (PyG) — most mature open-source GNN library; supports GraphSAGE, GAT, and GIN architectures with batch training on large graphs
+Transaction ML
+LightGBM — fastest gradient boosting inference; native NA handling; SHAP-compatible; widely deployed in Indian banking sector
+Unsupervised Anomaly
+scikit-learn Isolation Forest — low latency; no label requirement; complementary to supervised models
+Data Streaming
+Apache Kafka — industry standard for financial event streaming; supports exactly-once delivery semantics critical for fraud detection
+Feature Store
+Redis — sub-millisecond feature retrieval for real-time inference; TTL-based expiry for velocity window features
+Graph Database
+Neo4j — native graph storage for account-transaction network; Cypher query language for efficient subgraph traversal
+Explainability
+SHAP (shap library) — TreeExplainer for LightGBM (fast); DeepLIFT for GNN; standardized JSON explanation format
+Orchestration
+Apache Airflow — scheduled retraining DAGs; drift detection jobs; regulatory report generation
+API Layer
+FastAPI (Python) — async REST endpoints; under 5ms overhead; OpenAPI documentation auto-generated for integration teams
+Monitoring
+Prometheus + Grafana — model score distribution monitoring; concept drift dashboards; alert latency tracking
+6. Regulatory Alignment and Compliance
+6.1 Applicable Regulatory Framework
+FraudGraph Shield is designed with explicit compliance against the following regulatory frameworks governing fraud detection and reporting in Indian public sector banks:
+RBI Master Direction on Know Your Customer (KYC), 2016 (updated 2023): The system's risk tier classification (Low/Medium/High/Critical) aligns with the RBI's risk-based KYC categorization framework. High and Critical risk accounts are automatically escalated for enhanced due diligence (EDD) review.
+Prevention of Money Laundering Act (PMLA), 2002, Section 12: All transaction blocking actions and STR filings are logged with full audit trails meeting PMLA record-keeping requirements. Reports are generated in the format prescribed by the Financial Intelligence Unit India (FIU-IND).
+RBI Circular on Fraud Risk Management (RBI/2024-25/45): The system's escalation thresholds, analyst review timelines, and reporting workflows are designed to comply with the Early Warning Signals (EWS) framework specified in this circular.
+I4C / CFMS Integration Guidelines: Account freeze actions triggered by Critical-risk scores include automatic generation of a CFMS complaint ticket in the format specified by the Ministry of Home Affairs I4C technical integration guide.
+Information Technology Act, 2000, Section 43A (Data Protection): All account data is processed within the bank's own infrastructure. No raw account data leaves the perimeter. I4C queries use one-way hashed identifiers. SHAP explanations contain only feature importance values, not raw transaction amounts.
+6.2 Explainability for Regulatory Audit
+A significant advantage of the FraudGraph Shield architecture over deep learning black-box approaches is full auditability. Every automated action — transaction blocking, account freezing, STR filing — is accompanied by a SHAP explanation document that can be produced on demand for RBI supervisory reviews. This addresses the emerging regulatory expectation that AI-driven decisions in banking must be explainable to both customers and regulators.
+Audit Trail Example
+Account A0045789 flagged at Critical risk (score: 87.3). Top contributing factors: (1) CFMS active alert present — contribution +18.2; (2) Transaction velocity ratio 3.4x above segment baseline (3-month window) — contribution +14.7; (3) GNN mule probability 0.82 — contribution +13.1; (4) 94% of received funds forwarded within 3 hours — contribution +11.8; (5) Account tenure 47 days with 9 unique new counterparties — contribution +9.4.
+7. Prototype Development Plan
+7.1 Phase-wise Roadmap (July–August 2026)
+The prototype is scoped to demonstrate the core value proposition — mule graph detection + transaction scoring + explainability — within the 6-week window available before the August 2026 finale. Production-scale features (Kafka streaming, Airflow orchestration) are simulated using batch equivalents in the prototype.
+Phase
+Deliverable
+Timeline
+Phase 1: Data & Models
+Full preprocessing pipeline on provided dataset. LightGBM transaction scorer trained and validated. SHAP analysis completed. Baseline AUC-ROC reported.
+July 1–14
+Phase 2: Graph Engine
+Account transaction graph constructed from dataset. GraphSAGE model trained. THVS (Temporal Hop Velocity Signature) features implemented. Mule cluster visualization ready.
+July 15–28
+Phase 3: Fusion & API
+Risk fusion engine combining both model scores. FastAPI scoring endpoint operational. CFMS alert simulation (mock API with realistic alert data). Composite score thresholds calibrated.
+July 29 – August 10
+Phase 4: Dashboard & Demo
+Analyst dashboard: risk queue, SHAP explanation view, account network graph visualization, trend charts. End-to-end demo scenario (suspicious account submitted, scored, explained, flagged).
+August 11–20
+Phase 5: Progress Report
+Written progress report submitted as per hackathon requirement. Performance metrics documented. Architecture diagram finalized.
+August 17
+Phase 6: Final Presentation
+Live demo at IIT Hyderabad. Presentation covers problem, architecture, results, regulatory fit, and live scoring demonstration.
+August 27–28
+7.2 Demo Scenario
+The finale demonstration will follow this scenario to showcase all major system capabilities in under 10 minutes:
+Analyst selects a suspicious account identifier from the risk queue in the dashboard.
+System displays the account's network graph — showing the relay chain of connected accounts, each colored by their mule probability score. Cluster membership is highlighted.
+The SHAP explanation panel shows the top 5 risk drivers for the selected account with contribution magnitudes visualized as a horizontal bar chart.
+A simulated incoming transaction is submitted through the scoring API. The real-time score (computed in under 150ms) is displayed with the composite breakdown: GNN score, LightGBM score, CFMS alert indicator.
+The transaction triggers a High Risk classification. The analyst review queue is updated, and a mock TMS alert is generated showing the standardized alert format.
+The analyst confirms the account as a mule account. The feedback pipeline log shows the record being added to the training queue for the next retraining cycle.
+7.3 Team Responsibilities
+Team Member Role
+Specific Responsibilities
+ML Lead
+LightGBM model training and validation, SHAP analysis, hyperparameter tuning, model performance documentation, Isolation Forest implementation
+Data Engineer
+Dataset preprocessing pipeline, feature engineering, SMOTE implementation, graph construction from dataset, missingness analysis
+Backend Developer
+FastAPI scoring endpoint, risk fusion engine, CFMS mock API integration, Redis feature store, retraining pipeline
+Frontend / Visualization
+Analyst dashboard (React or Streamlit), network graph visualization (D3.js or Cytoscape), SHAP waterfall charts, risk queue UI
+8. Innovation Summary and Competitive Differentiation
+8.1 Three Novel Contributions
+FraudGraph Shield introduces three innovations that distinguish it from existing commercial fraud detection solutions and from expected competing submissions:
+Innovation 1: Temporal Hop Velocity Signature (THVS)
+Existing graph-based fraud systems detect structural anomalies (unusual connectivity patterns). THVS adds a temporal dimension by quantifying how rapidly money traverses each hop in a relay chain and what fraction of the received amount is forwarded. This combination of topology and timing creates a signature that is extremely difficult for fraudsters to mimic without abandoning the economic utility of the mule network.
+Innovation 2: Adaptive Per-Account Behavioral Baseline
+Rather than comparing accounts to static population averages, the system maintains a continuously updated exponential moving average baseline for each account. This prevents the account-warming attack pattern where fraudsters operate accounts legitimately for months to avoid triggering static rules before using them for fraud. The concept drift detection layer ensures the system identifies shifts in fraud patterns proactively.
+Innovation 3: Cross-Bank Federated Mule Intelligence via I4C
+By querying the I4C national mule account registry for destination accounts in outgoing transactions, the system extends its detection radius beyond the bank's own account base. This is the first student-level proposal to explicitly architect this cross-institution detection capability using the government's existing I4C infrastructure — a capability that aligns precisely with the hackathon's focus on collaboration between banks and government institutions.
+8.2 Expected Impact
+Impact Metric
+Expected Value and Basis
+Mule accounts detected before fund exit
+65–75% of active mule relay accounts identified within first transaction cycle, based on published GraphSAGE performance on similar financial graph datasets
+Transaction false positive rate
+Below 2.5% at 80% recall threshold, based on LightGBM benchmark performance on class-imbalanced financial transaction datasets
+Time to detection (mule network)
+From account activation to GNN flagging: median under 48 hours for accounts exhibiting THVS signature
+Regulatory reporting automation
+100% of Critical-risk actions auto-generate compliant STR and CFMS ticket drafts, reducing analyst documentation time by an estimated 70%
+Cross-bank fraud prevention
+I4C registry query catches estimated 30–40% of outgoing transfers to known mule accounts at other banks (based on I4C published registry size)
+9. Conclusion
+FraudGraph Shield addresses Problem Statement 2 in its fullest scope: not merely detecting anomalous individual transactions, but identifying the coordinated account networks that enable money laundering, integrating real-time government fraud alert feeds, and producing actionable, explainable risk intelligence that bank analysts and regulators can act on and audit.
+The three novel contributions — Temporal Hop Velocity Signatures, Adaptive Per-Account Behavioral Baselines, and Cross-Bank Federated Mule Intelligence via I4C — represent genuine advances over existing commercial solutions, not incremental reconfigurations of standard ML pipelines. Each innovation addresses a specific, documented gap in current bank fraud defense capabilities.
+The architecture is designed with Bank of India's production constraints in mind: modular microservices for phased adoption, technology choices that align with existing banking infrastructure, sub-150ms inference latency for real-time deployment, and full regulatory compliance including SHAP explainability, FIU-IND STR filing integration, and PMLA-compliant audit trails.
+We are confident that FraudGraph Shield represents the most complete, technically rigorous, and deployable response to PS2 in this hackathon, and we look forward to demonstrating its capabilities at IIT Hyderabad in August 2026.
+Document prepared by Team FraudGraph Shield
+SRIT Coimbatore  |  PSB Cybersecurity, Fraud & AI Hackathon 2026  |  Problem Statement 2

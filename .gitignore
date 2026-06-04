@@ -1,0 +1,13 @@
+.venv/
+__pycache__/
+*.pyc
+.ipynb_checkpoints/
+.pytest_cache/
+*.csv
+*.xlsx
+large_files.txt
+find_large_files.py
+test_plots/
+piptemp/
+tmp/
+*.log
