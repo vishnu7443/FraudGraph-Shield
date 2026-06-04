@@ -225,7 +225,7 @@ def main():
         
     # 8. Hyperparameter Tuning (Days 10–11)
     print("\n--------------------------------------------------")
-    print("Running Bayesian Hyperparameter Optimization with Optuna (max 50 trials)...")
+    print("Running Bayesian Hyperparameter Optimization with Optuna (max 20 trials)...")
     
     # 3-Fold Stratified CV pre-split and preprocessed for speed
     print("Pre-preprocessing Optuna CV folds...")
@@ -285,13 +285,19 @@ def main():
             trial_aucs.append(roc_auc_score(y_va, preds_va))
             best_iterations.append(model.best_iteration_)
             
+            del model
+            import gc
+            gc.collect()
+            
         trial.set_user_attr('best_iteration', int(np.mean(best_iterations)))
         mean_auc = np.mean(trial_aucs)
-        print(f"  Trial {trial.number+1}/50: Mean AUC-ROC = {mean_auc:.4f} (avg trees: {trial.user_attrs['best_iteration']})")
+        print(f"  Trial {trial.number+1}/20: Mean AUC-ROC = {mean_auc:.4f} (avg trees: {trial.user_attrs['best_iteration']})")
+        import gc
+        gc.collect()
         return mean_auc
 
     study = optuna.create_study(direction='maximize')
-    study.optimize(objective, n_trials=50)
+    study.optimize(objective, n_trials=20)
     
     print("\nOptuna Hyperparameter Tuning Complete!")
     print(f"Best Trial AUC-ROC: {study.best_value:.4f}")
