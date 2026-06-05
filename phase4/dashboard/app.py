@@ -25,6 +25,8 @@ st.set_page_config(
 st.markdown("""
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Outfit:wght@400;500;600;700;800&display=swap');
+        
+        /* Global Font & Color Palette Overrides */
         html, body, [class*="css"], .stMarkdown {
             font-family: 'Inter', sans-serif !important;
         }
@@ -33,19 +35,72 @@ st.markdown("""
             font-weight: 700 !important;
             letter-spacing: -0.5px;
         }
+        
+        /* Slate Dark Background Accent */
+        .stApp {
+            background: radial-gradient(circle at 50% 0%, #1e293b 0%, #0f172a 100%) !important;
+        }
+        
+        /* Premium Glassmorphism Cards */
         .glass-card {
-            background: rgba(30, 41, 59, 0.45);
-            border: 1px solid rgba(255, 255, 255, 0.08);
-            border-radius: 12px;
-            padding: 22px;
-            box-shadow: 0 8px 16px rgba(0, 0, 0, 0.25);
-            margin-bottom: 20px;
-            transition: all 0.25s ease-in-out;
+            background: rgba(30, 41, 59, 0.45) !important;
+            border: 1px solid rgba(255, 255, 255, 0.08) !important;
+            border-radius: 12px !important;
+            padding: 24px !important;
+            box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37) !important;
+            backdrop-filter: blur(10px) !important;
+            -webkit-backdrop-filter: blur(10px) !important;
+            margin-bottom: 20px !important;
+            transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1) !important;
         }
         .glass-card:hover {
-            transform: translateY(-2px);
-            border-color: rgba(255, 255, 255, 0.15);
-            box-shadow: 0 12px 24px rgba(0, 0, 0, 0.35);
+            transform: translateY(-3px) !important;
+            border-color: rgba(255, 255, 255, 0.18) !important;
+            box-shadow: 0 12px 40px 0 rgba(0, 0, 0, 0.5) !important;
+        }
+        
+        /* Target Streamlit's native bordered containers to look like glass cards */
+        div[data-testid="stVerticalBlockBorder"] {
+            background: rgba(30, 41, 59, 0.45) !important;
+            border: 1px solid rgba(255, 255, 255, 0.08) !important;
+            border-radius: 12px !important;
+            padding: 20px !important;
+            box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37) !important;
+            backdrop-filter: blur(10px) !important;
+            -webkit-backdrop-filter: blur(10px) !important;
+        }
+        
+        /* Metric Card Styling */
+        div[data-testid="stMetricValue"] {
+            font-family: 'Outfit', sans-serif !important;
+            font-size: 30px !important;
+            font-weight: 800 !important;
+            color: #ffffff !important;
+            text-shadow: 0 2px 4px rgba(0,0,0,0.3) !important;
+        }
+        div[data-testid="stMetricLabel"] {
+            font-family: 'Inter', sans-serif !important;
+            font-size: 13px !important;
+            font-weight: 600 !important;
+            text-transform: uppercase !important;
+            letter-spacing: 0.5px !important;
+            color: rgba(255, 255, 255, 0.6) !important;
+        }
+        
+        /* Beautiful Scrollbars */
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: rgba(15, 23, 42, 0.3);
+        }
+        ::-webkit-scrollbar-thumb {
+            background: rgba(255, 255, 255, 0.15);
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: rgba(255, 255, 255, 0.3);
         }
     </style>
 """, unsafe_allow_html=True)

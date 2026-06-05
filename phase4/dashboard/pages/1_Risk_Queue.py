@@ -20,6 +20,79 @@ st.set_page_config(
     layout="wide"
 )
 
+# Custom Global CSS for Dark Mode Glassmorphism
+st.markdown("""
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Outfit:wght@400;500;600;700;800&display=swap');
+        
+        /* Global Font & Color Palette Overrides */
+        html, body, [class*="css"], .stMarkdown {
+            font-family: 'Inter', sans-serif !important;
+        }
+        h1, h2, h3, h4, .stHeader {
+            font-family: 'Outfit', sans-serif !important;
+            font-weight: 700 !important;
+            letter-spacing: -0.5px;
+        }
+        
+        /* Slate Dark Background Accent */
+        .stApp {
+            background: radial-gradient(circle at 50% 0%, #1e293b 0%, #0f172a 100%) !important;
+        }
+        
+        /* Target Streamlit's native bordered containers to look like glass cards */
+        div[data-testid="stVerticalBlockBorder"] {
+            background: rgba(30, 41, 59, 0.45) !important;
+            border: 1px solid rgba(255, 255, 255, 0.08) !important;
+            border-radius: 12px !important;
+            padding: 20px !important;
+            box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37) !important;
+            backdrop-filter: blur(10px) !important;
+            -webkit-backdrop-filter: blur(10px) !important;
+        }
+        
+        /* Metric Card Styling */
+        div[data-testid="stMetricValue"] {
+            font-family: 'Outfit', sans-serif !important;
+            font-size: 30px !important;
+            font-weight: 800 !important;
+            color: #ffffff !important;
+            text-shadow: 0 2px 4px rgba(0,0,0,0.3) !important;
+        }
+        div[data-testid="stMetricLabel"] {
+            font-family: 'Inter', sans-serif !important;
+            font-size: 13px !important;
+            font-weight: 600 !important;
+            text-transform: uppercase !important;
+            letter-spacing: 0.5px !important;
+            color: rgba(255, 255, 255, 0.6) !important;
+        }
+        
+        /* Custom style for streamlit tables and dataframes */
+        div.stDataFrame {
+            border: 1px solid rgba(255, 255, 255, 0.08) !important;
+            border-radius: 8px !important;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2) !important;
+        }
+        
+        /* Beautiful Scrollbars */
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: rgba(15, 23, 42, 0.3);
+        }
+        ::-webkit-scrollbar-thumb {
+            background: rgba(255, 255, 255, 0.15);
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: rgba(255, 255, 255, 0.3);
+        }
+    </style>
+""", unsafe_allow_html=True)
+
 st.title("📋 Risk Queue")
 st.caption("Accounts flagged for analyst review — sorted by composite risk score")
 
@@ -123,28 +196,82 @@ else:
 
 st.divider()
 
-# Quick stats
-c1, c2, c3 = st.columns(3)
-if not df.empty:
-    c1.metric("CRITICAL accounts", len(df[df["risk_tier"]=="CRITICAL"]))
-    c2.metric("CFMS-alerted", len(df[df["cfms"]==True]))
-    c3.metric("Pending BLOCK action", len(df[df["action"]=="BLOCK"]))
-else:
-    c1.metric("CRITICAL accounts", 0)
-    c2.metric("CFMS-alerted", 0)
-    c3.metric("Pending BLOCK action", 0)
+# Quick stats and summary chart using container columns
+st.markdown("### 📊 Queue Summary Insights")
+col_stats, col_chart = st.columns([1, 2])
 
-# Click to deep dive
-st.subheader("Deep Dive into an Account")
-st.write("Select an account from the queue list below to triage and explain:")
+with col_stats:
+    with st.container(border=True):
+        st.markdown("<h5 style='margin-top:0;'>Key Metrics</h5>", unsafe_allow_html=True)
+        c1, c2 = st.columns(2)
+        if not df.empty:
+            c1.metric("CRITICAL Alerts", len(df[df["risk_tier"]=="CRITICAL"]))
+            c2.metric("CFMS Reported", len(df[df["cfms"]==True]))
+            st.metric("Pending BLOCK Actions", len(df[df["action"]=="BLOCK"]))
+        else:
+            c1.metric("CRITICAL Alerts", 0)
+            c2.metric("CFMS Reported", 0)
+            st.metric("Pending BLOCK Actions", 0)
 
-available_accounts = df["account_id"].tolist() if not df.empty else [1247, 3891, 5042, 7234]
-selected_id = st.selectbox(
-    "Choose Account ID to load into Deep Dive",
-    options=available_accounts,
-    format_func=lambda x: f"Account #{x} (Tier: {df[df['account_id']==x]['risk_tier'].values[0] if not df.empty and x in df['account_id'].values else 'Flagged'})"
-)
+with col_chart:
+    with st.container(border=True):
+        st.markdown("<h5 style='margin-top:0;'>Alert Severity Distribution</h5>", unsafe_allow_html=True)
+        if not df.empty:
+            import plotly.graph_objects as go
+            tier_counts = df["risk_tier"].value_counts().reset_index()
+            tier_counts.columns = ["Risk Level", "Count"]
+            
+            # Sort in standard order
+            order = {"CRITICAL": 0, "HIGH": 1, "MEDIUM": 2, "LOW": 3}
+            tier_counts["sort"] = tier_counts["Risk Level"].map(order)
+            tier_counts = tier_counts.sort_values("sort", ascending=False) # low to critical for bottom-up chart
+            
+            colors_map = {
+                "CRITICAL": "#E53935",
+                "HIGH":     "#FF9800",
+                "MEDIUM":   "#FFD54F",
+                "LOW":      "#4CAF50"
+            }
+            
+            fig_summary = go.Figure(go.Bar(
+                x=tier_counts["Count"],
+                y=tier_counts["Risk Level"],
+                orientation="h",
+                marker=dict(
+                    color=[colors_map.get(t, "#9E9E9E") for t in tier_counts["Risk Level"]],
+                    line=dict(color="rgba(255,255,255,0.15)", width=1)
+                ),
+                text=tier_counts["Count"],
+                textposition="outside",
+                height=160
+            ))
+            fig_summary.update_layout(
+                margin=dict(l=10, r=30, t=10, b=10),
+                plot_bgcolor="rgba(0,0,0,0)",
+                paper_bgcolor="rgba(0,0,0,0)",
+                font={"color": "white"},
+                xaxis=dict(showgrid=True, gridcolor="rgba(255,255,255,0.05)", showticklabels=True),
+                yaxis=dict(gridcolor="rgba(0,0,0,0)")
+            )
+            st.plotly_chart(fig_summary, use_container_width=True, config={"displayModeBar": False})
+        else:
+            st.write("No alerts to summarize.")
 
-if st.button("🔍 Analyse Account", type="primary"):
-    st.session_state["selected_account"] = selected_id
-    st.switch_page("pages/2_Account_Deep_Dive.py")
+st.divider()
+
+# Click to deep dive in a glassmorphic container
+st.subheader("🔍 Deep Dive and Triage Investigation")
+with st.container(border=True):
+    st.write("Select an account from the queue list below to load into the detailed analysis dashboard:")
+    
+    available_accounts = df["account_id"].tolist() if not df.empty else [1247, 3891, 5042, 7234]
+    selected_id = st.selectbox(
+        "Choose Account ID to load into Deep Dive",
+        options=available_accounts,
+        format_func=lambda x: f"Account #{x} (Tier: {df[df['account_id']==x]['risk_tier'].values[0] if not df.empty and x in df['account_id'].values else 'Flagged'})"
+    )
+    
+    if st.button("⚡ Triage & Analyse Account", type="primary"):
+        st.session_state["selected_account"] = selected_id
+        st.session_state["graph_account"] = selected_id
+        st.switch_page("pages/2_Account_Deep_Dive.py")
