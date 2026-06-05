@@ -306,27 +306,37 @@ os.unlink(temp_file_path)
 
 # Convert HTML string titles to DOM elements for rich hover tooltips in vis.js
 tooltip_js = """
-network = new vis.Network(container, data, options);
-
 // Convert HTML string titles to DOM elements for rich hover tooltips
-nodes.forEach(function(node) {
-    if (node.title && typeof node.title === 'string' && node.title.trim().startsWith('<')) {
+var nodesArray = nodes.get();
+nodesArray.forEach(function(node) {
+    if (node.title && typeof node.title === 'string' && node.title.includes('<')) {
         var parser = new DOMParser();
-        var doc = parser.parseFromString(node.title, 'text/html');
-        node.title = doc.body.firstChild;
-        nodes.update(node);
+        var doc = parser.parseFromString(node.title.trim(), 'text/html');
+        var elem = doc.body.firstElementChild || doc.body.firstChild;
+        if (elem) {
+            node.title = elem;
+            nodes.update(node);
+        }
     }
 });
-edges.forEach(function(edge) {
-    if (edge.title && typeof edge.title === 'string' && edge.title.trim().startsWith('<')) {
+
+var edgesArray = edges.get();
+edgesArray.forEach(function(edge) {
+    if (edge.title && typeof edge.title === 'string' && edge.title.includes('<')) {
         var parser = new DOMParser();
-        var doc = parser.parseFromString(edge.title, 'text/html');
-        edge.title = doc.body.firstChild;
-        edges.update(edge);
+        var doc = parser.parseFromString(edge.title.trim(), 'text/html');
+        var elem = doc.body.firstElementChild || doc.body.firstChild;
+        if (elem) {
+            edge.title = elem;
+            edges.update(edge);
+        }
     }
 });
+
+network = new vis.Network(container, data, options);
 """
 html = html.replace("network = new vis.Network(container, data, options);", tooltip_js)
+
 
 # Custom css override to remove default margins
 style_override = """
