@@ -3,6 +3,7 @@
 # Client module that wraps Phase 3 FastAPI scoring endpoints.
 # Incorporates automated fallback to demo_data.py if backend is unreachable.
 
+# pyrefly: ignore [missing-import]
 import httpx
 import streamlit as st
 import os
@@ -51,6 +52,17 @@ def _post(endpoint: str, payload: dict) -> Optional[Dict]:
     except Exception as e:
         st.session_state["api_fallback"] = True
         return None
+def _safe_get_score(account_id) -> Dict:
+    res = DEMO_SCORES.get(account_id) or DEMO_SCORES.get(str(account_id))
+    if not res:
+        res = list(DEMO_SCORES.values())[0]
+    return res.copy()
+
+def _safe_get_cluster(account_id) -> Dict:
+    res = DEMO_CLUSTERS.get(account_id) or DEMO_CLUSTERS.get(str(account_id))
+    if not res:
+        res = list(DEMO_CLUSTERS.values())[0]
+    return res.copy()
 
 def health_check() -> Dict:
     """Verifies backend API and model lifespan status."""
@@ -82,7 +94,7 @@ def score_transaction(account_id: int, amount: float,
         
     # Fallback to pre-baked demo scenario
     st.session_state["api_fallback"] = True
-    mock_score = DEMO_SCORES.get(account_id, DEMO_SCORES[0]).copy()
+    mock_score = _safe_get_score(account_id)
     mock_score["account_id"] = account_id
     mock_score["is_mock"] = True
     return mock_score
@@ -101,19 +113,7 @@ def get_cluster(account_id: int, hop_depth: int = 2) -> Dict:
         
     # Fallback to pre-baked demo scenario
     st.session_state["api_fallback"] = True
-    # Find matching cluster or generate simple mock cluster
-    cluster = DEMO_CLUSTERS.get(account_id)
-    if not cluster:
-        # Fallback dynamic mock cluster
-        cluster = {
-            "root_account_id": account_id,
-            "relay_chain_detected": False,
-            "cluster_nodes": [
-                {"account_id": account_id, "composite_score": 15.0, "gnn_mule_score": 0.1, "risk_tier": "LOW", "automated_action": "ALLOW"}
-            ],
-            "cluster_edges": []
-        }
-    cluster_copy = cluster.copy()
+    cluster_copy = _safe_get_cluster(account_id)
     cluster_copy["is_mock"] = True
     return cluster_copy
 
@@ -128,7 +128,7 @@ def score_batch(requests: list) -> List[Dict]:
     results = []
     for req in requests:
         acc_id = req["account_id"]
-        mock_score = DEMO_SCORES.get(acc_id, DEMO_SCORES[0]).copy()
+        mock_score = _safe_get_score(acc_id)
         mock_score["account_id"] = acc_id
         mock_score["is_mock"] = True
         results.append(mock_score)
@@ -136,4 +136,5 @@ def score_batch(requests: list) -> List[Dict]:
 
 def get_demo_score(account_id: int) -> Dict:
     """Directly fetch demo scores for presentation fallback UI."""
-    return DEMO_SCORES.get(account_id, DEMO_SCORES[0])
+    return _safe_get_score(account_id)
+

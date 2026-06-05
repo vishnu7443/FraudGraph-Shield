@@ -1,11 +1,10 @@
 # phase4/dashboard/pages/2_Account_Deep_Dive.py
 #
-# Renders the individual account deep-dive, including score gauges, SHAP waterfall impact charts,
-# feature store metrics, and an interactive transaction simulator.
+# Renders the individual account deep-dive, including score gauges, SHAP waterfall charts,
+# and an interactive transaction simulator.
 
 import streamlit as st
-import pandas as pd
-import numpy as np
+import plotly.graph_objects as go
 import os
 import sys
 
@@ -13,210 +12,133 @@ import sys
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from api_client import score_transaction
-from demo_data import DEMO_METADATA, DEMO_SCORES
-from components.score_gauge import render_score_gauge
-from components.action_badge import get_action_badge, get_risk_tier_badge
-from components.shap_chart import render_shap_chart
+from demo_data import DEMO_SCORES
 
-st.set_page_config(
-    page_title="Account Deep Dive — FraudGraph Shield",
-    page_icon="🛡️",
-    layout="wide"
-)
+st.title("🔬 Account Deep Dive")
 
-# Typography & Glassmorphism card styles
+account_id = st.session_state.get("selected_account", 1247)
+use_demo = st.session_state.get("use_demo", True)
+
+# Custom fonts
 st.markdown("""
     <style>
-        .deep-title {
-            font-family: 'Outfit', sans-serif;
-            font-size: 28px;
-            font-weight: 700;
-            color: #ffffff;
-            margin-bottom: 15px;
-        }
-        .section-header {
-            font-family: 'Outfit', sans-serif;
-            font-size: 18px;
-            font-weight: 600;
-            color: #ffffff;
-            margin-bottom: 12px;
-            border-left: 3px solid #3b82f6;
-            padding-left: 8px;
-        }
-        .deep-card {
-            background: rgba(30, 41, 59, 0.4);
-            border: 1px solid rgba(255, 255, 255, 0.08);
-            border-radius: 10px;
-            padding: 20px;
-            margin-bottom: 20px;
-        }
-        .badge-row {
-            display: flex;
-            gap: 10px;
-            align-items: center;
-            margin-bottom: 15px;
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Outfit:wght@400;500;600;700;800&display=swap');
+        h1, h2, h3, h4, .stHeader {
+            font-family: 'Outfit', sans-serif !important;
+            font-weight: 700 !important;
         }
     </style>
 """, unsafe_allow_html=True)
 
-# Select default account from session state or query params
-selected_acc_id = st.session_state.get("selected_account_id", 1001)
+# Scoring controls
+st.subheader(f"Account #{account_id}")
+col1, col2, col3, col4 = st.columns(4)
+amount   = col1.number_input("Transaction Amount (₹)", value=50000, step=1000)
+channel  = col2.selectbox("Channel", ["UPI", "NEFT", "RTGS", "ATM", "MOBILE"])
+hour     = col3.slider("Hour of Day", 0, 23, 14)
+new_cp   = col4.checkbox("New Counterparty")
 
-st.markdown('<div class="deep-title">🔍 Account Risk Deep-Dive</div>', unsafe_allow_html=True)
+if st.button("⚡ Score Transaction", type="primary"):
+    with st.spinner("Scoring..."):
+        if use_demo:
+            result = DEMO_SCORES.get(str(account_id), DEMO_SCORES.get(account_id, list(DEMO_SCORES.values())[0]))
+        else:
+            result = score_transaction(account_id, amount, channel, hour, new_cp)
 
-# Sidebar selector to change target account quickly
-st.sidebar.markdown("### 🎯 Investigation Target")
-acc_choices = list(DEMO_METADATA.keys())
-sidebar_acc = st.sidebar.selectbox(
-    "Active Account ID",
-    options=acc_choices,
-    index=acc_choices.index(selected_acc_id) if selected_acc_id in acc_choices else 0
+    if result:
+        st.session_state["last_result"] = result
+
+result = st.session_state.get("last_result",
+         DEMO_SCORES.get(str(account_id), DEMO_SCORES.get(account_id, list(DEMO_SCORES.values())[0])))
+
+st.divider()
+
+# Score display row
+col1, col2, col3, col4, col5 = st.columns(5)
+col1.metric("Composite Score", f"{result['composite_score']:.1f}/100")
+col2.metric("LightGBM Score",  f"{result['lgbm_score']:.3f}")
+col3.metric("GNN Mule Score",  f"{result['gnn_mule_score']:.3f}")
+col4.metric("Latency",         f"{result['inference_latency_ms']:.1f}ms")
+cfms_text = "🚨 YES" if result["cfms_alert_active"] else "✅ NO"
+col5.metric("CFMS Alert", cfms_text)
+
+# Risk tier badge
+tier_colors = {
+    "CRITICAL": "#C00000", "HIGH": "#B45F06",
+    "MEDIUM": "#1967D2",   "LOW": "#2E7D32"
+}
+action_labels = {
+    "BLOCK": "🔴 BLOCK", "HOLD": "🟡 HOLD",
+    "MONITOR": "🔵 MONITOR", "ALLOW": "🟢 ALLOW"
+}
+tier  = result["risk_tier"]
+color = tier_colors.get(tier, "#404040")
+st.markdown(
+    f'<div style="background:{color};color:white;padding:12px 24px;'
+    f'border-radius:8px;font-size:20px;font-weight:bold;text-align:center;margin:12px 0">'
+    f'Risk Tier: {tier} — {action_labels[result["automated_action"]]}</div>',
+    unsafe_allow_html=True
 )
 
-# Update state if changed
-if sidebar_acc != selected_acc_id:
-    st.session_state["selected_account_id"] = sidebar_acc
-    selected_acc_id = sidebar_acc
-    st.rerun()
+st.divider()
 
-# Fetch metadata
-meta = DEMO_METADATA.get(selected_acc_id, {
-    "account_name": f"Unknown Acc {selected_acc_id}",
-    "account_type": "Savings",
-    "branch": "Unknown Branch",
-    "risk_status": "Flagged",
-    "balance_inr": 0.0,
-    "kyc_status": "Unknown",
-    "tenure_days": 1,
-    "product_complexity": 1,
-    "peer_deviation_composite": 0.0
-})
+# Composite score gauge
+fig_gauge = go.Figure(go.Indicator(
+    mode="gauge+number",
+    value=result["composite_score"],
+    title={"text": "Composite Risk Score"},
+    gauge={
+        "axis": {"range": [0, 100]},
+        "bar": {"color": color},
+        "steps": [
+            {"range": [0, 40],  "color": "rgba(46, 125, 50, 0.1)"},
+            {"range": [40, 65], "color": "rgba(25, 103, 210, 0.1)"},
+            {"range": [65, 80], "color": "rgba(180, 95, 6, 0.1)"},
+            {"range": [80, 100],"color": "rgba(192, 0, 0, 0.1)"},
+        ],
+        "threshold": {
+            "line": {"color": "red", "width": 4},
+            "thickness": 0.75,
+            "value": result["composite_score"]
+        }
+    }
+))
+fig_gauge.update_layout(height=280, margin=dict(t=40, b=0, l=20, r=20), paper_bgcolor='rgba(0,0,0,0)', font={"color": "white"})
+st.plotly_chart(fig_gauge, use_container_width=True)
 
-# Display Customer Profile Header Card
-st.markdown('<div class="deep-card">', unsafe_allow_html=True)
-col_prof1, col_prof2, col_prof3, col_prof4 = st.columns(4)
-with col_prof1:
-    st.markdown(f"**Customer Name:** {meta['account_name']}")
-    st.markdown(f"**Account ID:** `{selected_acc_id}`")
-with col_prof2:
-    st.markdown(f"**Account Type:** {meta['account_type']}")
-    st.markdown(f"**Branch Location:** {meta['branch']}")
-with col_prof3:
-    st.markdown(f"**Balance (INR):** ₹{meta['balance_inr']:,.2f}")
-    st.markdown(f"**KYC Verification:** `{meta['kyc_status']}`")
-with col_prof4:
-    st.markdown(f"**Account Age:** {meta['tenure_days']} days")
-    st.markdown(f"**Peer Activity Deviation:** `{meta['peer_deviation_composite']:.2f}x`")
-st.markdown('</div>', unsafe_allow_html=True)
+st.divider()
 
-# Get current/pre-calculated scores for account
-pre_score = DEMO_SCORES.get(selected_acc_id, DEMO_SCORES[0])
+# SHAP waterfall chart
+st.subheader("🧠 Why was this account flagged? (SHAP Explanation)")
+shap_factors = result["top_shap_factors"]
+feature_names = [f["feature_name"].replace("_", " ").title() for f in shap_factors]
+contributions = [f["contribution"] for f in shap_factors]
+colors_shap   = ["#C00000" if c > 0 else "#2E7D32" for c in contributions]
 
-# Layout: Gauge on left, SHAP waterfall explanation on right
-col_gauge, col_shap = st.columns([1, 1])
+fig_shap = go.Figure(go.Bar(
+    y=feature_names,
+    x=contributions,
+    orientation="h",
+    marker_color=colors_shap,
+    text=[f"+{c:.4f}" if c > 0 else f"{c:.4f}" for c in contributions],
+    textposition="outside"
+))
+fig_shap.update_layout(
+    title="Top 5 Risk Factors (SHAP Contribution)",
+    xaxis_title="SHAP Value (impact on risk score)",
+    height=350,
+    margin=dict(l=20, r=20, t=50, b=20),
+    plot_bgcolor="rgba(0,0,0,0)",
+    paper_bgcolor='rgba(0,0,0,0)',
+    font={"color": "white"},
+    xaxis=dict(zeroline=True, zerolinecolor="white", zerolinewidth=1, gridcolor="rgba(255,255,255,0.1)"),
+    yaxis=dict(gridcolor="rgba(0,0,0,0)")
+)
+st.plotly_chart(fig_shap, use_container_width=True)
 
-with col_gauge:
-    st.markdown('<div class="section-header">Composite Risk Assessment</div>', unsafe_allow_html=True)
-    st.markdown('<div class="deep-card" style="text-align: center;">', unsafe_allow_html=True)
-    
-    # Render Plotly gauge
-    score_val = pre_score["composite_score"]
-    fig_gauge = render_score_gauge(score_val)
-    st.plotly_chart(fig_gauge, use_container_width=True)
-    
-    # Badges Row
-    badge_html = f"""
-    <div class="badge-row" style="justify-content: center;">
-        <span>Risk Tier: {get_risk_tier_badge(pre_score['risk_tier'])}</span>
-        <span>Decision: {get_action_badge(pre_score['automated_action'])}</span>
-    </div>
-    """
-    st.markdown(badge_html, unsafe_allow_html=True)
-    
-    # Model Splits
-    st.markdown(f"""
-    <div style="font-size: 13px; color: #94a3b8; text-align: left; padding: 10px 20px;">
-        • <b>LightGBM Transaction Score:</b> {pre_score.get('lgbm_score', 0.0):.4f}<br/>
-        • <b>GraphSAGE GNN Mule Score:</b> {pre_score.get('gnn_mule_score', 0.0):.4f}<br/>
-        • <b>CFMS Active Alert:</b> {"Yes" if pre_score.get('cfms_alert_active') else "No"}<br/>
-        • <b>Inference Latency:</b> {pre_score.get('inference_latency_ms', 0.0):.2f} ms
-    </div>
-    """, unsafe_allow_html=True)
-    
-    st.markdown('</div>', unsafe_allow_html=True)
+st.caption("Red bars increase fraud risk. Green bars decrease fraud risk.")
 
-with col_shap:
-    st.markdown('<div class="section-header">Explainable AI (SHAP Waterfall)</div>', unsafe_allow_html=True)
-    st.markdown('<div class="deep-card">', unsafe_allow_html=True)
-    st.write("Visualizes the feature contributions increasing (red) or decreasing (green) the risk score.")
-    
-    # Render SHAP Chart
-    fig_shap = render_shap_chart(pre_score.get("top_shap_factors", []))
-    st.plotly_chart(fig_shap, use_container_width=True)
-    st.markdown('</div>', unsafe_allow_html=True)
-
-# --- Real-Time Transaction Simulator ---
-st.markdown('<div class="section-header">⚡ Live Real-Time Transaction Simulator</div>', unsafe_allow_html=True)
-st.markdown("""
-    Test transaction parameters in real-time. This queries the **Risk Fusion Engine API** (or falls back to demo matrices if offline) 
-    using the active feature-store cached variables for this account ID.
-""")
-
-st.markdown('<div class="deep-card">', unsafe_allow_html=True)
-col_sim1, col_sim2, col_sim3 = st.columns(3)
-
-with col_sim1:
-    sim_amount = st.number_input("Transaction Amount (INR)", min_value=1.0, value=25000.0, step=1000.0)
-    sim_channel = st.selectbox("Payment Channel", options=["UPI", "NEFT", "RTGS", "ATM", "MOBILE"])
-    
-with col_sim2:
-    sim_hour = st.slider("Hour of Day (0-23)", min_value=0, max_value=23, value=14)
-    sim_round_amount = st.checkbox("Is Round Amount (e.g. ₹50000)", value=False)
-
-with col_sim3:
-    sim_new_counterparty = st.checkbox("Is New Counterparty", value=False)
-    st.write("") # Spacer
-    st.write("") # Spacer
-    run_score = st.button("⚡ Execute Score Engine", type="primary")
-
-if run_score:
-    with st.spinner("Scoring transaction with pipeline..."):
-        score_res = score_transaction(
-            account_id=selected_acc_id,
-            amount=sim_amount,
-            channel=sim_channel,
-            hour=sim_hour,
-            is_new_counterparty=sim_new_counterparty,
-            is_round_amount=sim_round_amount
-        )
-        
-        if score_res:
-            st.session_state[f"sim_res_{selected_acc_id}"] = score_res
-            st.success("Scoring complete! Visualizations above have updated.")
-            
-            # Show simulated details
-            st.markdown("#### Simulation Pipeline Log Output")
-            col_log1, col_log2 = st.columns(2)
-            with col_log1:
-                st.json(score_res)
-            with col_log2:
-                # Explain the boosters applied
-                boosters = []
-                if sim_round_amount: boosters.append("+3.0 (Round Amount Anomaly)")
-                if sim_new_counterparty: boosters.append("+2.0 (New Counterparty Risk)")
-                if sim_hour in [0,1,2,3,4]: boosters.append("+4.0 (Late-Night Transfer)")
-                if sim_channel == "UPI" and score_res.get("lgbm_score", 0) > 0.6: boosters.append("+3.0 (High Risk UPI Booster)")
-                
-                st.markdown("**Boosters Applied:**")
-                if boosters:
-                    for b in boosters:
-                        st.markdown(f"- `{b}`")
-                else:
-                    st.markdown("- *None*")
-                    
-                # Update visual display state dynamically
-                DEMO_SCORES[selected_acc_id] = score_res
-                st.rerun()
-        else:
-            st.error("Failed to score transaction.")
-st.markdown('</div>', unsafe_allow_html=True)
+st.divider()
+if st.button("🕸️ View Account Network Graph →", type="secondary"):
+    st.session_state["graph_account"] = account_id
+    st.switch_page("pages/3_Network_Graph.py")

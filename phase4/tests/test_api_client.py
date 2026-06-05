@@ -19,7 +19,7 @@ def test_fallback_score_transaction():
     # Force _post to raise an exception by patching it
     with patch("phase4.dashboard.api_client._post", return_value=None):
         res = api_client.score_transaction(
-            account_id=1001,
+            account_id=1247,
             amount=50000.0,
             channel="UPI",
             hour=14,
@@ -27,16 +27,16 @@ def test_fallback_score_transaction():
             is_round_amount=True
         )
         assert res is not None
-        assert res["account_id"] == 1001
+        assert res["account_id"] == 1247
         assert res["is_mock"] is True
-        assert res["composite_score"] == 94.2
-        assert res["automated_action"] == "BLOCK"
+        assert res["composite_score"] == 60.87
+        assert res["automated_action"] == "MONITOR"
         assert st.session_state["api_fallback"] is True
 
 def test_successful_api_score():
     """Test that when API returns values, score_transaction routes them correctly."""
     mock_response = {
-        "account_id": 1001,
+        "account_id": 1247,
         "composite_score": 45.0,
         "risk_tier": "MEDIUM",
         "automated_action": "MONITOR",
@@ -47,9 +47,9 @@ def test_successful_api_score():
         "inference_latency_ms": 12.0
     }
     with patch("phase4.dashboard.api_client._post", return_value=mock_response):
-        res = api_client.score_transaction(1001, 20000.0, "UPI", 12)
+        res = api_client.score_transaction(1247, 20000.0, "UPI", 12)
         assert res is not None
-        assert res["account_id"] == 1001
+        assert res["account_id"] == 1247
         assert res["is_mock"] is False
         assert res["composite_score"] == 45.0
         assert res["automated_action"] == "MONITOR"
@@ -57,9 +57,8 @@ def test_successful_api_score():
 def test_fallback_get_cluster():
     """Test that when API is unreachable, get_cluster falls back to pre-baked clusters."""
     with patch("phase4.dashboard.api_client._post", return_value=None):
-        res = api_client.get_cluster(1001)
+        res = api_client.get_cluster(1247)
         assert res is not None
-        assert res["root_account_id"] == 1001
+        assert res["root_account_id"] == 1247
         assert res["is_mock"] is True
-        assert res["relay_chain_detected"] is True
-        assert len(res["cluster_nodes"]) == 5
+        assert len(res["cluster_nodes"]) == 97

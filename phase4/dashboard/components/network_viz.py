@@ -4,6 +4,7 @@
 # Assigns node colors according to risk tiers (CRITICAL=Red, HIGH=Orange, etc.)
 # and renders interactive tooltips.
 
+# pyrefly: ignore [missing-import]
 from pyvis.network import Network
 import tempfile
 import os

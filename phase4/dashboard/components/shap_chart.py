@@ -3,6 +3,7 @@
 # SHAP explanation chart component. Renders a horizontal bar chart displaying
 # features that increase risk (in red) and features that decrease risk (in green).
 
+# pyrefly: ignore [missing-import]
 import plotly.graph_objects as go
 import pandas as pd
 

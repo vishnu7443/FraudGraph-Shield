@@ -2,10 +2,12 @@
 #
 # Async integration tests using httpx AsyncClient with injected mock dependencies.
 
+# pyrefly: ignore [missing-import]
 import pytest
 import pytest_asyncio
 import numpy as np
 from unittest.mock import MagicMock, AsyncMock
+# pyrefly: ignore [missing-import]
 from httpx import AsyncClient, ASGITransport
 
 

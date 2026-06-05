@@ -4,7 +4,9 @@
 # RiskFusionEngine.compute_cfms_score() without loading real models.
 # We patch __init__ to skip model loading entirely.
 
+# pyrefly: ignore [missing-import]
 import pytest
+# pyrefly: ignore [missing-import]
 import numpy as np
 from unittest.mock import patch, MagicMock
 from phase3.core.fusion_engine import RiskFusionEngine

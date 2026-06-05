@@ -1,154 +1,151 @@
 # phase4/dashboard/pages/3_Network_Graph.py
 #
-# Renders the GraphSAGE network visualization page. Traces transaction connections
-# and identifies co-suspicious mule account networks and temporal fund routing relay chains.
+# Renders the GraphSAGE network visualization page. Uses PyVis to draw interactive graph
+# structures colored by GNN mule scores, highlighting co-suspicious transaction pathways.
 
 import streamlit as st
 import streamlit.components.v1 as components
+from pyvis.network import Network
+from api_client import get_cluster
+from demo_data import DEMO_CLUSTERS
+import tempfile
 import os
 import sys
 
 # Ensure imports work
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-from api_client import get_cluster
-from demo_data import DEMO_METADATA
-from components.network_viz import generate_network_html
-from components.action_badge import get_risk_tier_badge
+st.title("🕸️ Mule Account Network Graph")
+st.caption("Interactive relay chain visualization — colored by mule probability score")
 
-st.set_page_config(
-    page_title="Mule Network Visualization — FraudGraph Shield",
-    page_icon="🛡️",
-    layout="wide"
-)
+account_id = st.session_state.get("graph_account", 1247)
+use_demo   = st.session_state.get("use_demo", True)
+hop_depth  = st.slider("Hop depth", 1, 3, 2,
+    help="How many transaction hops to traverse from the root account")
 
-# Page styles
-st.markdown("""
-    <style>
-        .net-title {
-            font-family: 'Outfit', sans-serif;
-            font-size: 28px;
-            font-weight: 700;
-            color: #ffffff;
-            margin-bottom: 15px;
-        }
-        .net-card {
-            background: rgba(30, 41, 59, 0.4);
-            border: 1px solid rgba(255, 255, 255, 0.08);
-            border-radius: 10px;
-            padding: 20px;
-            margin-bottom: 20px;
-        }
-        .alert-banner {
-            background: rgba(220, 38, 38, 0.15);
-            border: 1.5px solid #ef4444;
-            border-radius: 8px;
-            padding: 15px;
-            color: #fca5a5;
-            font-size: 14px;
-            margin-bottom: 20px;
-        }
-    </style>
-""", unsafe_allow_html=True)
-
-st.markdown('<div class="net-title">🕸️ GraphSAGE Mule Network Visualization</div>', unsafe_allow_html=True)
-st.markdown("Inspect transaction hops, counterparty networks, and suspicious money relay chains mapped by the GraphSAGE GNN.")
-
-# Load active target account
-selected_acc_id = st.session_state.get("selected_account_id", 1001)
-
-# Selector in sidebar
-st.sidebar.markdown("### 🕸️ Select Graph Root")
-acc_choices = list(DEMO_METADATA.keys())
-sidebar_acc = st.sidebar.selectbox(
-    "Root Account ID",
-    options=acc_choices,
-    index=acc_choices.index(selected_acc_id) if selected_acc_id in acc_choices else 0
-)
-
-# Update state if changed
-if sidebar_acc != selected_acc_id:
-    st.session_state["selected_account_id"] = sidebar_acc
-    selected_acc_id = sidebar_acc
-    st.rerun()
-
-# Retrieve cluster representation from api client
-with st.spinner("Retrieving GraphSAGE cluster nodes & edges..."):
-    cluster_data = get_cluster(selected_acc_id)
-
-if not cluster_data:
-    st.error("Failed to load network cluster data.")
+if use_demo:
+    cluster = DEMO_CLUSTERS.get(str(account_id), DEMO_CLUSTERS.get(account_id, list(DEMO_CLUSTERS.values())[0]))
 else:
-    # Check if a relay chain is flagged
-    relay_detected = cluster_data.get("relay_chain_detected", False)
-    
-    if relay_detected:
-        st.markdown(f"""
-            <div class="alert-banner">
-                🚨 <b>CRITICAL MULE RELAY CHAIN FLAGGED:</b> Account <b>{selected_acc_id}</b> is routing funds in a consecutive temporal chain 
-                (1001 &rarr; 1002 &rarr; 1003) within a 5-minute interval. This indicates automated syndicate laundering. 
-                Recommended Action: <b>Block Core Banking System (CBS) transfers on all nodes in this chain immediately.</b>
-            </div>
-        """, unsafe_allow_html=True)
-        
-    # Render Graph layout: 3/4 network, 1/4 node details list
-    col_viz, col_nodes = st.columns([3, 1])
-    
-    with col_viz:
-        st.markdown("**Interactive Network Visualization (Pan, Zoom, Hover for details)**")
-        
-        # Call component to build HTML code
-        nodes = cluster_data.get("cluster_nodes", [])
-        edges = cluster_data.get("cluster_edges", [])
-        
-        html_code = generate_network_html(nodes, edges, selected_acc_id)
-        
-        # Render the PyVis generated html frame
-        components.html(html_code, height=480)
-        
-        # Key Legend
-        st.markdown("""
-        <div style="font-size: 12px; color: #94a3b8; display: flex; gap: 20px; justify-content: center; margin-top: 10px;">
-            <span><span style="color: #dc2626; font-size: 14px;">●</span> Critical Risk</span>
-            <span><span style="color: #f97316; font-size: 14px;">●</span> High Risk</span>
-            <span><span style="color: #f59e0b; font-size: 14px;">●</span> Medium Risk</span>
-            <span><span style="color: #3b82f6; font-size: 14px;">●</span> Low Risk</span>
-            <span><b>Channels:</b> <span style="color: #22d3ee;">Cyan = UPI</span> | <span style="color: #a855f7;">Purple = RTGS</span> | <span style="color: #34d399;">Green = NEFT</span></span>
-        </div>
-        """, unsafe_allow_html=True)
-        
-    with col_nodes:
-        st.markdown("**Cluster Accounts Details**")
-        st.markdown(f"Total Nodes: `{len(nodes)}` | Total Connections: `{len(edges)}`")
-        
-        # List nodes
-        for node in nodes:
-            node_id = node["account_id"]
-            tier = node["risk_tier"]
-            score = node["composite_score"]
-            action = node["automated_action"]
-            
-            # Format text color & details
-            is_root_str = " (Root Target)" if node_id == selected_acc_id else ""
-            
-            st.markdown(f"""
-            <div class="net-card" style="padding: 10px; margin-bottom: 10px; font-size: 12px;">
-                <b>Account ID:</b> `{node_id}` {is_root_str}<br/>
-                <b>Risk Score:</b> <b>{score:.1f}</b><br/>
-                <b>Tier:</b> {get_risk_tier_badge(tier)}<br/>
-                <b>Action:</b> <code>{action}</code>
-            </div>
-            """, unsafe_allow_html=True)
+    cluster = get_cluster(account_id, hop_depth)
 
-    # Relay path explanation
-    if relay_detected:
-        st.markdown("### 🔍 Traced Fund Hopping Pattern")
-        st.markdown("""
-        The network demonstrates a high-velocity, round-number flow. Syndicate operators split high amounts into 
-        mule nodes to evade single transaction alerts:
-        1. **Node 1001 (Aditya Sharma)** receives an outside payment of ₹150,000 via UPI.
-        2. **Node 1002 (Rohan Deshmukh)** receives ₹145,000 via UPI within 90 seconds.
-        3. **Node 1003 (Vikram Malhotra)** receives ₹140,000 via UPI within 3 minutes of Node 1002.
+if not cluster:
+    st.warning("No cluster data available.")
+    st.stop()
+
+# PyVis network setup
+net = Network(
+    height="600px", width="100%",
+    bgcolor="#0F1117",         # dark background — looks great on projectors
+    font_color="white",
+    directed=True
+)
+net.set_options("""
+{
+  "physics": {
+    "enabled": true,
+    "stabilization": {"iterations": 100}
+  },
+  "edges": {
+    "arrows": {"to": {"enabled": true, "scaleFactor": 1.2}},
+    "color": {"color": "#555555"},
+    "width": 2
+  }
+}
+""")
+
+def score_to_color(score: float) -> str:
+    if score >= 0.8:    return "#C00000"   # deep red — critical
+    elif score >= 0.65: return "#FF6B00" # orange — high
+    elif score >= 0.4:  return "#FFC107" # amber — medium
+    else:               return "#2E7D32" # green — low
+
+def score_to_size(score: float) -> int:
+    return int(20 + score * 40)          # bigger node = higher risk
+
+root_id = cluster["root_account_id"]
+nodes   = cluster["cluster_nodes"]
+
+# Add nodes
+for node in nodes:
+    acc_id   = node["account_id"]
+    # Handle schema variance: some nodes use mule_score, others use composite_score
+    score    = node.get("mule_score", node.get("composite_score", 0.0))
+    # Standardize score scaling (if 0-100 scale, normalize to 0-1)
+    norm_score = score / 100.0 if score > 1.0 else score
+    
+    color    = score_to_color(norm_score)
+    size     = score_to_size(norm_score)
+    label    = f"Acc #{acc_id}\n{norm_score:.2f}"
+    border   = "#FFFFFF" if acc_id == root_id else color
+    title    = (f"Account: {acc_id}\n"
+                f"Mule Score: {norm_score:.4f}\n"
+                f"Type: {node.get('account_type', 'Unknown')}\n"
+                f"Risk: {node.get('risk_tier', 'LOW')}")
+
+    net.add_node(
+        acc_id,
+        label=label,
+        color={"background": color, "border": border},
+        size=size,
+        title=title,
+        borderWidth=3 if acc_id == root_id else 1
+    )
+
+# Add edges — root connects to all
+for i, node in enumerate(nodes):
+    target_id = node["account_id"]
+    if target_id != root_id:
+        m_score = node.get("mule_score", node.get("composite_score", 0.0))
+        norm_m_score = m_score / 100.0 if m_score > 1.0 else m_score
         
-        This behavior matches a **Layering Phase** mule chain designed to quickly siphon cash before bank risk managers can block the account.
-        """)
+        net.add_edge(root_id, target_id,
+                     title=f"Relay link",
+                     width=max(1, int(norm_m_score * 4)))
+
+# Chain edges — simulate money relay sequence
+for i in range(len(nodes) - 1):
+    source_id = nodes[i]["account_id"]
+    target_id = nodes[i+1]["account_id"]
+    if source_id != target_id:
+        net.add_edge(
+            source_id,
+            target_id,
+            color="#FF6B00",
+            dashes=True,
+            title="Suspected relay"
+        )
+
+# Render to temp HTML
+temp_dir = tempfile.gettempdir()
+temp_file_path = os.path.join(temp_dir, f"pyvis_graph_{account_id}.html")
+
+net.save_graph(temp_file_path)
+with open(temp_file_path, "r", encoding="utf-8") as f:
+    html = f.read()
+os.unlink(temp_file_path)
+
+# Custom css override to remove default margins
+style_override = """
+<style>
+    body { margin: 0; padding: 0; background-color: #0F1117; overflow: hidden; }
+</style>
+"""
+html = html.replace("<style>", style_override + "<style>")
+
+# Show cluster stats
+relay = cluster.get("relay_chain_detected", False)
+# Handle schema variance for cluster_risk_score
+cluster_risk = cluster.get("cluster_risk_score", max([n.get("mule_score", n.get("composite_score", 0.0)) for n in nodes]) if nodes else 0.0)
+norm_cluster_risk = cluster_risk / 100.0 if cluster_risk > 1.0 else cluster_risk
+
+col1, col2, col3 = st.columns(3)
+col1.metric("Accounts in Cluster", len(nodes))
+col2.metric("Cluster Risk Score",  f"{norm_cluster_risk:.3f}")
+col3.metric("Relay Chain", "🚨 DETECTED" if relay else "✅ None")
+
+if relay:
+    st.error("⚠️ Money relay chain detected. Recommend immediate freeze of all cluster accounts.")
+
+st.divider()
+components.html(html, height=620, scrolling=False)
+st.caption("Node size = risk level. Red = Critical. Dashed edges = suspected relay path.")
