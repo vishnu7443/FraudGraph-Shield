@@ -16,9 +16,6 @@ from demo_data import DEMO_SCORES
 
 st.title("🔬 Account Deep Dive")
 
-account_id = st.session_state.get("selected_account", 1247)
-use_demo = st.session_state.get("use_demo", True)
-
 # Custom fonts
 st.markdown("""
     <style>
@@ -30,13 +27,41 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
+# Dropdown selector to switch accounts directly on the deep-dive page
+available_accounts = [1247, 3891, 5042, 7234]
+current_selected = st.session_state.get("selected_account", 1247)
+if current_selected not in available_accounts:
+    available_accounts.append(current_selected)
+
+selected_account = st.selectbox(
+    "🔎 Select Account to Investigate",
+    options=available_accounts,
+    index=available_accounts.index(current_selected),
+    help="Select which flagged bank account to investigate. This updates the SHAP explanation, gauges, and network graphs."
+)
+
+# Update session state if changed
+if selected_account != current_selected:
+    st.session_state["selected_account"] = selected_account
+    # Clear the last simulated result so we load the default profile of the new account
+    if "last_result" in st.session_state:
+        del st.session_state["last_result"]
+    st.rerun()
+
+account_id = selected_account
+use_demo = st.session_state.get("use_demo", True)
+
 # Scoring controls
-st.subheader(f"Account #{account_id}")
+st.subheader(f"Simulate Transaction for Account #{account_id}")
 col1, col2, col3, col4 = st.columns(4)
-amount   = col1.number_input("Transaction Amount (₹)", value=50000, step=1000)
-channel  = col2.selectbox("Channel", ["UPI", "NEFT", "RTGS", "ATM", "MOBILE"])
-hour     = col3.slider("Hour of Day", 0, 23, 14)
-new_cp   = col4.checkbox("New Counterparty")
+amount   = col1.number_input("Transaction Amount (₹)", value=50000, step=1000,
+                             help="The monetary value of the incoming/outgoing transfer in Indian Rupees (INR). Spikes in amounts trigger transaction model alerts.")
+channel  = col2.selectbox("Channel", ["UPI", "NEFT", "RTGS", "ATM", "MOBILE"],
+                          help="The channel used for the transfer. High-velocity UPI transfers are typical in automated fraud, while RTGS/NEFT are for larger amounts.")
+hour     = col3.slider("Hour of Day", 0, 23, 14,
+                       help="The hour at which the transfer was initiated. Midnight transfers (11 PM - 4 AM) are flagged as high risk.")
+new_cp   = col4.checkbox("New Counterparty",
+                         help="Check if the destination account has never transacted with the sender before. New connections have higher risk weighting.")
 
 if st.button("⚡ Score Transaction", type="primary"):
     with st.spinner("Scoring..."):
@@ -55,12 +80,17 @@ st.divider()
 
 # Score display row
 col1, col2, col3, col4, col5 = st.columns(5)
-col1.metric("Composite Score", f"{result['composite_score']:.1f}/100")
-col2.metric("LightGBM Score",  f"{result['lgbm_score']:.3f}")
-col3.metric("GNN Mule Score",  f"{result['gnn_mule_score']:.3f}")
-col4.metric("Latency",         f"{result['inference_latency_ms']:.1f}ms")
+col1.metric("Composite Score", f"{result['composite_score']:.1f}/100", 
+            help="Unified Threat Rating: A weighted fusion combining transaction parameters (35%), network graph connections (40%), and government alerts (25%).")
+col2.metric("LightGBM Score",  f"{result['lgbm_score']:.3f}",
+            help="Transaction pattern anomaly risk (calculated from amount value, payments channel type, late-night hours, and new counterparty flags).")
+col3.metric("GNN Mule Score",  f"{result['gnn_mule_score']:.3f}",
+            help="Network connection risk: checks whether this node belongs to a dense subgraph connected to known mule accounts using Graph Neural Networks.")
+col4.metric("Latency",         f"{result['inference_latency_ms']:.1f}ms",
+            help="Scoring latency of the pipeline. Must remain below the bank's 350ms speed limit.")
 cfms_text = "🚨 YES" if result["cfms_alert_active"] else "✅ NO"
-col5.metric("CFMS Alert", cfms_text)
+col5.metric("CFMS Alert", cfms_text,
+            help="Checks whether this account has an active case filed in the national I4C / FIU-IND cybercrime registries.")
 
 # Risk tier badge
 tier_colors = {
@@ -79,6 +109,12 @@ st.markdown(
     f'Risk Tier: {tier} — {action_labels[result["automated_action"]]}</div>',
     unsafe_allow_html=True
 )
+
+st.info("💡 **How to interpret these risk dimensions (for non-technical presenters):**\n"
+        "- **Composite Risk Score (0-100)**: The final rating. A weighted blend of: **35% Transaction Model**, **40% Graph Neural Network**, and **25% Government Alert**. Scores above **80** automatically trigger a `BLOCK`.\n"
+        "- **LightGBM Score (0 to 1)**: Evaluates *current activity*. Flags irregular amounts, late-night transfers, or sending money to brand new recipients.\n"
+        "- **GNN Mule Score (0 to 1)**: Evaluates *network behavior*. Using a Graph Neural Network, it maps transaction relationships across the bank. If this account is closely linked (1-2 hops away) to known mule accounts, its GNN score rises close to `1.0`.\n"
+        "- **CFMS Alert**: Yes/No flag showing if this account ID has a cybercrime report filed in the national cybercrime portal.")
 
 st.divider()
 
@@ -136,7 +172,7 @@ fig_shap.update_layout(
 )
 st.plotly_chart(fig_shap, use_container_width=True)
 
-st.caption("Red bars increase fraud risk. Green bars decrease fraud risk.")
+st.caption("🔍 **How to read the SHAP chart:** Red bars represent features that pushed the score higher (increased risk, e.g., peer activity deviation), while Green bars represent features that dragged the score lower (decreased risk, e.g., long account age/tenure).")
 
 st.divider()
 if st.button("🕸️ View Account Network Graph →", type="secondary"):

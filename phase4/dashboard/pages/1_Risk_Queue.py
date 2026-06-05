@@ -23,6 +23,22 @@ st.set_page_config(
 st.title("📋 Risk Queue")
 st.caption("Accounts flagged for analyst review — sorted by composite risk score")
 
+st.info("💡 **What is this?** This screen is the alert queue. The AI models run in the background on all transaction streams. When an account violates threat thresholds, it is automatically flagged here so bank analysts can review the risk score, recommended automated action, and alert source.")
+
+with st.expander("📚 Guide: Understanding the Threat Queue Metrics (Click to Expand)", expanded=True):
+    st.markdown("""
+    - **Account ID**: The unique bank account number flagged. (Commas have been removed from the table below for clean copying/searching).
+    - **Composite Risk Score (0-100)**: The unified risk score. A score above **65** is High risk, and above **80** is Critical.
+    - **Risk Level**: Classification of threat (Critical, High, Medium, Low).
+    - **Recommended Action**: The automated action taken by the gateway:
+      - `BLOCK`: Transactions are blocked; account is frozen immediately.
+      - `HOLD`: Suspicious transfers are temporarily held for 24 hours.
+      - `MONITOR`: Account transactions are logged and observed closely.
+      - `ALLOW`: Low-risk normal operation.
+    - **Government Alert (CFMS)**: Indicates if the national cybercrime portal (I4C/CFMS) has reported active fraud cases against this account number.
+    - **Inference Latency**: The exact time in milliseconds the AI model took to calculate the threat level (typically <90 milliseconds).
+    """)
+
 use_demo = st.session_state.get("use_demo", True)
 
 if use_demo:
@@ -50,8 +66,10 @@ if not queue_data:
 # Filter controls
 col1, col2 = st.columns(2)
 tier_filter = col1.multiselect("Filter by Risk Tier",
-    ["CRITICAL", "HIGH", "MEDIUM"], default=["CRITICAL", "HIGH", "MEDIUM"])
-cfms_filter = col2.checkbox("Show only CFMS-alerted accounts", value=False)
+    ["CRITICAL", "HIGH", "MEDIUM"], default=["CRITICAL", "HIGH", "MEDIUM"],
+    help="Filter accounts by their classified threat severity level.")
+cfms_filter = col2.checkbox("Show only CFMS-alerted accounts", value=False,
+    help="Check to show only accounts that have an active cybercrime alert in the national registry.")
 
 df = pd.DataFrame(queue_data)
 if tier_filter:
@@ -82,13 +100,26 @@ def color_action(val):
 if df.empty:
     st.warning("No flagged alerts match the selected criteria.")
 else:
-    styled = (df.style
-        .applymap(color_tier, subset=["risk_tier"])
-        .applymap(color_action, subset=["action"])
-        .format({"composite_score": "{:.1f}", "latency": "{:.1f}ms"})
+    # Prepare display version of dataframe with friendly column names and formats
+    df_display = df.rename(columns={
+        "account_id": "Account ID",
+        "composite_score": "Composite Risk Score (0-100)",
+        "risk_tier": "Risk Level",
+        "action": "Recommended Action",
+        "cfms": "Government Alert (CFMS)",
+        "latency": "Inference Latency"
+    })
+    
+    # Map boolean CFMS to Yes/No icons for clarity
+    df_display["Government Alert (CFMS)"] = df_display["Government Alert (CFMS)"].map({True: "🚨 YES", False: "✅ NO"})
+
+    styled = (df_display.style
+        .applymap(color_tier, subset=["Risk Level"])
+        .applymap(color_action, subset=["Recommended Action"])
+        .format({"Account ID": "{}", "Composite Risk Score (0-100)": "{:.1f}", "Inference Latency": "{:.1f}ms"})
     )
 
-    st.dataframe(styled, use_container_width=True, height=350)
+    st.dataframe(styled, use_container_width=True, height=350, hide_index=True)
 
 st.divider()
 
@@ -105,8 +136,15 @@ else:
 
 # Click to deep dive
 st.subheader("Deep Dive into an Account")
-selected_id = st.number_input("Enter Account ID", min_value=0,
-                               max_value=9081, value=1247, step=1)
+st.write("Select an account from the queue list below to triage and explain:")
+
+available_accounts = df["account_id"].tolist() if not df.empty else [1247, 3891, 5042, 7234]
+selected_id = st.selectbox(
+    "Choose Account ID to load into Deep Dive",
+    options=available_accounts,
+    format_func=lambda x: f"Account #{x} (Tier: {df[df['account_id']==x]['risk_tier'].values[0] if not df.empty and x in df['account_id'].values else 'Flagged'})"
+)
+
 if st.button("🔍 Analyse Account", type="primary"):
     st.session_state["selected_account"] = selected_id
     st.switch_page("pages/2_Account_Deep_Dive.py")
