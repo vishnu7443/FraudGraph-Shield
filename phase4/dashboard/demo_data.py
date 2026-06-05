@@ -164,6 +164,215 @@ DEMO_SCORES = {
         ],
         "inference_latency_ms": 418.18,
         "model_version": "v1.0.0"
+    },
+    "8234": {
+        "account_id": 8234,
+        "composite_score": 68.1,
+        "risk_tier": "HIGH",
+        "automated_action": "HOLD",
+        "lgbm_score": 0.7245,
+        "gnn_mule_score": 0.6124,
+        "cfms_alert_active": true,
+        "cfms_alert_age_hours": 14.2,
+        "top_shap_factors": [
+            {"feature_name": "F3907", "contribution": 0.3541, "direction": "increases_risk"},
+            {"feature_name": "F474", "contribution": 0.1802, "direction": "increases_risk"},
+            {"feature_name": "tenure_days", "contribution": -0.2104, "direction": "decreases_risk"},
+            {"feature_name": "is_round_amount", "contribution": 0.1147, "direction": "increases_risk"},
+            {"feature_name": "F3886", "contribution": -0.0984, "direction": "decreases_risk"}
+        ],
+        "inference_latency_ms": 112.4,
+        "model_version": "v1.0.0"
+    },
+    "2198": {
+        "account_id": 2198,
+        "composite_score": 47.9,
+        "risk_tier": "MEDIUM",
+        "automated_action": "MONITOR",
+        "lgbm_score": 0.5184,
+        "gnn_mule_score": 0.4102,
+        "cfms_alert_active": false,
+        "cfms_alert_age_hours": null,
+        "top_shap_factors": [
+            {"feature_name": "F3907", "contribution": 0.1241, "direction": "increases_risk"},
+            {"feature_name": "F3919", "contribution": 0.0842, "direction": "increases_risk"},
+            {"feature_name": "tenure_days", "contribution": -0.1542, "direction": "decreases_risk"},
+            {"feature_name": "product_complexity", "contribution": -0.0847, "direction": "decreases_risk"},
+            {"feature_name": "F3886", "contribution": 0.0512, "direction": "increases_risk"}
+        ],
+        "inference_latency_ms": 105.8,
+        "model_version": "v1.0.0"
+    },
+    "6734": {
+        "account_id": 6734,
+        "composite_score": 44.2,
+        "risk_tier": "MEDIUM",
+        "automated_action": "MONITOR",
+        "lgbm_score": 0.3842,
+        "gnn_mule_score": 0.4568,
+        "cfms_alert_active": true,
+        "cfms_alert_age_hours": 72.5,
+        "top_shap_factors": [
+            {"feature_name": "F3907", "contribution": 0.1102, "direction": "increases_risk"},
+            {"feature_name": "F474", "contribution": 0.0945, "direction": "increases_risk"},
+            {"feature_name": "tenure_days", "contribution": -0.1845, "direction": "decreases_risk"},
+            {"feature_name": "is_new_counterparty", "contribution": 0.0542, "direction": "increases_risk"},
+            {"feature_name": "F3886", "contribution": -0.0412, "direction": "decreases_risk"}
+        ],
+        "inference_latency_ms": 98.4,
+        "model_version": "v1.0.0"
+    },
+    "1242": {
+        "account_id": 1242,
+        "composite_score": 88.5,
+        "risk_tier": "CRITICAL",
+        "automated_action": "BLOCK",
+        "lgbm_score": 0.9124,
+        "gnn_mule_score": 0.8421,
+        "cfms_alert_active": true,
+        "cfms_alert_age_hours": 4.5,
+        "top_shap_factors": [
+            {"feature_name": "F3907", "contribution": 0.4215, "direction": "increases_risk"},
+            {"feature_name": "F474", "contribution": 0.3124, "direction": "increases_risk"},
+            {"feature_name": "F3919", "contribution": 0.2145, "direction": "increases_risk"},
+            {"feature_name": "is_round_amount", "contribution": 0.1542, "direction": "increases_risk"},
+            {"feature_name": "tenure_days", "contribution": -0.0845, "direction": "decreases_risk"}
+        ],
+        "inference_latency_ms": 118.2,
+        "model_version": "v1.0.0"
+    },
+    "1240": {
+        "account_id": 1240,
+        "composite_score": 92.1,
+        "risk_tier": "CRITICAL",
+        "automated_action": "BLOCK",
+        "lgbm_score": 0.9412,
+        "gnn_mule_score": 0.8999,
+        "cfms_alert_active": true,
+        "cfms_alert_age_hours": 1.2,
+        "top_shap_factors": [
+            {"feature_name": "F3907", "contribution": 0.4856, "direction": "increases_risk"},
+            {"feature_name": "F474", "contribution": 0.3541, "direction": "increases_risk"},
+            {"feature_name": "F3919", "contribution": 0.2541, "direction": "increases_risk"},
+            {"feature_name": "is_round_amount", "contribution": 0.1842, "direction": "increases_risk"},
+            {"feature_name": "tenure_days", "contribution": -0.0654, "direction": "decreases_risk"}
+        ],
+        "inference_latency_ms": 122.4,
+        "model_version": "v1.0.0"
+    },
+    "1239": {
+        "account_id": 1239,
+        "composite_score": 95.4,
+        "risk_tier": "CRITICAL",
+        "automated_action": "BLOCK",
+        "lgbm_score": 0.9678,
+        "gnn_mule_score": 0.9324,
+        "cfms_alert_active": false,
+        "cfms_alert_age_hours": null,
+        "top_shap_factors": [
+            {"feature_name": "F3907", "contribution": 0.5124, "direction": "increases_risk"},
+            {"feature_name": "F474", "contribution": 0.3845, "direction": "increases_risk"},
+            {"feature_name": "F3919", "contribution": 0.2874, "direction": "increases_risk"},
+            {"feature_name": "is_new_counterparty", "contribution": 0.1985, "direction": "increases_risk"},
+            {"feature_name": "tenure_days", "contribution": -0.0512, "direction": "decreases_risk"}
+        ],
+        "inference_latency_ms": 124.9,
+        "model_version": "v1.0.0"
+    },
+    "1293": {
+        "account_id": 1293,
+        "composite_score": 87.2,
+        "risk_tier": "CRITICAL",
+        "automated_action": "BLOCK",
+        "lgbm_score": 0.8924,
+        "gnn_mule_score": 0.8124,
+        "cfms_alert_active": true,
+        "cfms_alert_age_hours": 18.6,
+        "top_shap_factors": [
+            {"feature_name": "F3907", "contribution": 0.3984, "direction": "increases_risk"},
+            {"feature_name": "F474", "contribution": 0.2984, "direction": "increases_risk"},
+            {"feature_name": "F3918", "contribution": 0.1874, "direction": "increases_risk"},
+            {"feature_name": "is_round_amount", "contribution": 0.1458, "direction": "increases_risk"},
+            {"feature_name": "tenure_days", "contribution": -0.0984, "direction": "decreases_risk"}
+        ],
+        "inference_latency_ms": 115.6,
+        "model_version": "v1.0.0"
+    },
+    "1333": {
+        "account_id": 1333,
+        "composite_score": 89.9,
+        "risk_tier": "CRITICAL",
+        "automated_action": "BLOCK",
+        "lgbm_score": 0.9245,
+        "gnn_mule_score": 0.8654,
+        "cfms_alert_active": true,
+        "cfms_alert_age_hours": 8.1,
+        "top_shap_factors": [
+            {"feature_name": "F3907", "contribution": 0.4412, "direction": "increases_risk"},
+            {"feature_name": "F474", "contribution": 0.3245, "direction": "increases_risk"},
+            {"feature_name": "F3919", "contribution": 0.2245, "direction": "increases_risk"},
+            {"feature_name": "is_round_amount", "contribution": 0.1658, "direction": "increases_risk"},
+            {"feature_name": "tenure_days", "contribution": -0.0784, "direction": "decreases_risk"}
+        ],
+        "inference_latency_ms": 120.1,
+        "model_version": "v1.0.0"
+    },
+    "1339": {
+        "account_id": 1339,
+        "composite_score": 94.6,
+        "risk_tier": "CRITICAL",
+        "automated_action": "BLOCK",
+        "lgbm_score": 0.9587,
+        "gnn_mule_score": 0.9142,
+        "cfms_alert_active": false,
+        "cfms_alert_age_hours": null,
+        "top_shap_factors": [
+            {"feature_name": "F3907", "contribution": 0.4998, "direction": "increases_risk"},
+            {"feature_name": "F474", "contribution": 0.3658, "direction": "increases_risk"},
+            {"feature_name": "F3919", "contribution": 0.2658, "direction": "increases_risk"},
+            {"feature_name": "is_new_counterparty", "contribution": 0.1784, "direction": "increases_risk"},
+            {"feature_name": "tenure_days", "contribution": -0.0584, "direction": "decreases_risk"}
+        ],
+        "inference_latency_ms": 123.5,
+        "model_version": "v1.0.0"
+    },
+    "6629": {
+        "account_id": 6629,
+        "composite_score": 78.4,
+        "risk_tier": "HIGH",
+        "automated_action": "HOLD",
+        "lgbm_score": 0.8124,
+        "gnn_mule_score": 0.7245,
+        "cfms_alert_active": false,
+        "cfms_alert_age_hours": null,
+        "top_shap_factors": [
+            {"feature_name": "F3907", "contribution": 0.3124, "direction": "increases_risk"},
+            {"feature_name": "F474", "contribution": 0.2245, "direction": "increases_risk"},
+            {"feature_name": "F3919", "contribution": 0.1542, "direction": "increases_risk"},
+            {"feature_name": "is_round_amount", "contribution": 0.1124, "direction": "increases_risk"},
+            {"feature_name": "tenure_days", "contribution": -0.1124, "direction": "decreases_risk"}
+        ],
+        "inference_latency_ms": 108.9,
+        "model_version": "v1.0.0"
+    },
+    "158": {
+        "account_id": 158,
+        "composite_score": 82.3,
+        "risk_tier": "CRITICAL",
+        "automated_action": "BLOCK",
+        "lgbm_score": 0.8541,
+        "gnn_mule_score": 0.7845,
+        "cfms_alert_active": true,
+        "cfms_alert_age_hours": 2.8,
+        "top_shap_factors": [
+            {"feature_name": "F3907", "contribution": 0.3654, "direction": "increases_risk"},
+            {"feature_name": "F474", "contribution": 0.2654, "direction": "increases_risk"},
+            {"feature_name": "F3918", "contribution": 0.1654, "direction": "increases_risk"},
+            {"feature_name": "is_round_amount", "contribution": 0.1245, "direction": "increases_risk"},
+            {"feature_name": "tenure_days", "contribution": -0.1024, "direction": "decreases_risk"}
+        ],
+        "inference_latency_ms": 111.3,
+        "model_version": "v1.0.0"
     }
 }
 

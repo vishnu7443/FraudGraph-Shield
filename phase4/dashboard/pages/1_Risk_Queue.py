@@ -117,10 +117,26 @@ use_demo = st.session_state.get("use_demo", True)
 if use_demo:
     queue_data = DEMO_RISK_QUEUE
 else:
-    # In live mode, batch score a set of watch-list accounts
-    watch_list = [{"account_id": i, "transaction_amount": 50000,
-                   "channel": "UPI", "hour_of_day": 14}
-                  for i in range(50)]
+    # In live mode, batch score a set of real watchlist accounts with varied transaction details
+    watch_list_accounts = [1247, 3891, 8234, 5042, 2198, 6734, 7234, 1242, 1240, 1239, 1293, 1333, 1339, 6629, 158]
+    watch_list = []
+    for acc in watch_list_accounts:
+        # Dynamically vary properties based on account ID to get varied LightGBM transaction scores
+        amount = 5000 + (acc % 9) * 10000
+        channel = ["UPI", "NEFT", "RTGS", "MOBILE"][(acc % 4)]
+        hour = (8 + (acc % 16)) % 24
+        is_round = (acc % 3 == 0)
+        is_new = (acc % 2 == 0)
+        
+        watch_list.append({
+            "account_id": acc,
+            "transaction_amount": amount,
+            "channel": channel,
+            "hour_of_day": hour,
+            "is_round_amount": is_round,
+            "is_new_counterparty": is_new
+        })
+        
     results = score_batch(watch_list) or []
     queue_data = [
         {"account_id": r["account_id"],
