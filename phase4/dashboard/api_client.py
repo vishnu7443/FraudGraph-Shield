@@ -3,12 +3,21 @@
 # Client module that wraps Phase 3 FastAPI scoring endpoints.
 # Incorporates automated fallback to demo_data.py if backend is unreachable.
 
-# pyrefly: ignore [missing-import]
 import httpx
-# pyrefly: ignore [missing-import]
 import streamlit as st
 import os
 from typing import Optional, Dict, List
+
+# Try importing demo data with package-relative path for pytest,
+# and fallback to top-level import for Streamlit runner runtime.
+try:
+    from phase4.dashboard.demo_data import DEMO_SCORES, DEMO_CLUSTERS
+except ModuleNotFoundError:
+    try:
+        from demo_data import DEMO_SCORES, DEMO_CLUSTERS
+    except ModuleNotFoundError:
+        # Fallback to direct import in case of other nested paths
+        from .demo_data import DEMO_SCORES, DEMO_CLUSTERS
 
 API_BASE = os.getenv("API_BASE_URL", "http://localhost:8000/api/v1")
 TIMEOUT = 3.0  # seconds
@@ -21,7 +30,7 @@ def check_backend_alive() -> bool:
     except Exception:
         return False
 
-def _get(endpoint: str, params: dict = {}) -> Optional[dict]:
+def _get(endpoint: str, params: dict = {}) -> Optional[Dict]:
     try:
         resp = httpx.get(f"{API_BASE}{endpoint}", params=params, timeout=TIMEOUT)
         resp.raise_for_status()
@@ -32,7 +41,7 @@ def _get(endpoint: str, params: dict = {}) -> Optional[dict]:
         st.session_state["api_fallback"] = True
         return None
 
-def _post(endpoint: str, payload: dict) -> Optional[dict]:
+def _post(endpoint: str, payload: dict) -> Optional[Dict]:
     try:
         resp = httpx.post(f"{API_BASE}{endpoint}", json=payload, timeout=TIMEOUT)
         resp.raise_for_status()
@@ -43,7 +52,7 @@ def _post(endpoint: str, payload: dict) -> Optional[dict]:
         st.session_state["api_fallback"] = True
         return None
 
-def health_check() -> dict:
+def health_check() -> Dict:
     """Verifies backend API and model lifespan status."""
     result = _get("/health")
     if result:
@@ -54,7 +63,7 @@ def health_check() -> dict:
 def score_transaction(account_id: int, amount: float,
                       channel: str, hour: int,
                       is_new_counterparty: bool = False,
-                      is_round_amount: bool = False) -> dict:
+                      is_round_amount: bool = False) -> Dict:
     """Scores a transaction in real-time or falls back to demo data."""
     payload = {
         "account_id": account_id,
@@ -73,13 +82,12 @@ def score_transaction(account_id: int, amount: float,
         
     # Fallback to pre-baked demo scenario
     st.session_state["api_fallback"] = True
-    from phase4.dashboard.demo_data import DEMO_SCORES
     mock_score = DEMO_SCORES.get(account_id, DEMO_SCORES[0]).copy()
     mock_score["account_id"] = account_id
     mock_score["is_mock"] = True
     return mock_score
 
-def get_cluster(account_id: int, hop_depth: int = 2) -> dict:
+def get_cluster(account_id: int, hop_depth: int = 2) -> Dict:
     """Retrieves cluster network nodes & edges from backend or falls back to demo data."""
     payload = {
         "account_id": account_id,
@@ -93,7 +101,6 @@ def get_cluster(account_id: int, hop_depth: int = 2) -> dict:
         
     # Fallback to pre-baked demo scenario
     st.session_state["api_fallback"] = True
-    from phase4.dashboard.demo_data import DEMO_CLUSTERS
     # Find matching cluster or generate simple mock cluster
     cluster = DEMO_CLUSTERS.get(account_id)
     if not cluster:
@@ -110,7 +117,7 @@ def get_cluster(account_id: int, hop_depth: int = 2) -> dict:
     cluster_copy["is_mock"] = True
     return cluster_copy
 
-def score_batch(requests: list) -> List[dict]:
+def score_batch(requests: list) -> List[Dict]:
     """Scores a batch of transactions concurrently or falls back to demo data."""
     resp = _post("/score/batch", {"requests": requests})
     if resp is not None:
@@ -118,7 +125,6 @@ def score_batch(requests: list) -> List[dict]:
         
     # Fallback to pre-baked demo scenario
     st.session_state["api_fallback"] = True
-    from phase4.dashboard.demo_data import DEMO_SCORES
     results = []
     for req in requests:
         acc_id = req["account_id"]
@@ -128,7 +134,6 @@ def score_batch(requests: list) -> List[dict]:
         results.append(mock_score)
     return results
 
-def get_demo_score(account_id: int) -> dict:
+def get_demo_score(account_id: int) -> Dict:
     """Directly fetch demo scores for presentation fallback UI."""
-    from phase4.dashboard.demo_data import DEMO_SCORES
     return DEMO_SCORES.get(account_id, DEMO_SCORES[0])
