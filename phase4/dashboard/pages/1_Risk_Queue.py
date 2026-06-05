@@ -242,8 +242,7 @@ with col_chart:
                     line=dict(color="rgba(255,255,255,0.15)", width=1)
                 ),
                 text=tier_counts["Count"],
-                textposition="outside",
-                height=160
+                textposition="outside"
             ))
             fig_summary.update_layout(
                 margin=dict(l=10, r=30, t=10, b=10),
@@ -251,7 +250,8 @@ with col_chart:
                 paper_bgcolor="rgba(0,0,0,0)",
                 font={"color": "white"},
                 xaxis=dict(showgrid=True, gridcolor="rgba(255,255,255,0.05)", showticklabels=True),
-                yaxis=dict(gridcolor="rgba(0,0,0,0)")
+                yaxis=dict(gridcolor="rgba(0,0,0,0)"),
+                height=160
             )
             st.plotly_chart(fig_summary, use_container_width=True, config={"displayModeBar": False})
         else:

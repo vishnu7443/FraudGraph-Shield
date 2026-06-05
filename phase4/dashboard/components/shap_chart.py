@@ -11,8 +11,12 @@ FEATURE_LABELS = {
     "peer_deviation_composite": "Peer Activity Deviation",
     "tenure_days": "Account Tenure (Days)",
     "product_complexity": "Product Complexity Score",
-    "F3891": "Occupation Risk Factor",
-    "F3886": "Account Profiling Behavior",
+    "F3891": "Occupation Category Risk",
+    "F3886": "Device Token Switch Rate",
+    "F474": "Outbound Velocity Ratio (7D)",
+    "F3918": "Round-Number Transfer Spike",
+    "F3919": "Late-Night UPI Velocity",
+    "F3907": "Recipient Concentration Ratio",
     "is_round_amount": "Transaction Roundness Anomaly",
     "is_new_counterparty": "New Counterparty Flag",
     "hour_of_day": "Transaction Hour",
@@ -34,8 +38,14 @@ def render_shap_chart(shap_factors: list) -> go.Figure:
         
     df = pd.DataFrame(shap_factors)
     
-    # Map feature names to clean labels
-    df["label"] = df["feature_name"].apply(lambda x: FEATURE_LABELS.get(x, f"Feature {x}"))
+    # Map feature names to clean labels showing both feature code and description
+    def format_label(feat):
+        desc = FEATURE_LABELS.get(feat)
+        if desc:
+            return f"{feat}: {desc}"
+        return f"{feat}: Raw Signal {feat}"
+        
+    df["label"] = df["feature_name"].apply(format_label)
     
     # Sort so highest contribution is at the top of the chart
     df = df.sort_values(by="contribution", ascending=True)
