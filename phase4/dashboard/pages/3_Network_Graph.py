@@ -65,6 +65,18 @@ def score_to_size(score: float) -> int:
 root_id = cluster["root_account_id"]
 nodes   = cluster["cluster_nodes"]
 
+# Add root node explicitly if not present in the GNN nodes list to prevent AssertionError
+has_root = any(node["account_id"] == root_id for node in nodes)
+if not has_root:
+    net.add_node(
+        root_id,
+        label=f"Acc #{root_id}\n(Root)",
+        color={"background": "#C00000", "border": "#FFFFFF"},
+        size=35,
+        title=f"Root Account: {root_id}\nRisk: Root Target Node",
+        borderWidth=3
+    )
+
 # Add nodes
 for node in nodes:
     acc_id   = node["account_id"]
