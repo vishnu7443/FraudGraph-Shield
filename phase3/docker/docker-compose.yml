@@ -1,0 +1,35 @@
+# phase3/docker/docker-compose.yml
+
+version: '3.8'
+services:
+  api:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    ports:
+      - "8000:8000"
+    environment:
+      - REDIS_URL=redis://redis:6379
+      - CFMS_MOCK_URL=http://cfms:8001
+      - LGBM_MODEL_PATH=/app/phase1/models/lgbm_model.pkl
+      - GNN_MODEL_PATH=/app/phase2/models/gnn_model.pt
+      - GRAPH_DATA_PATH=/app/phase2/models/graph_data.pt
+    depends_on:
+      - redis
+      - cfms
+    volumes:
+      - ../../phase1/models:/app/phase1/models:ro
+      - ../../phase2/models:/app/phase2/models:ro
+
+  cfms:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    command: uvicorn core.cfms_mock:cfms_app --host 0.0.0.0 --port 8001
+    ports:
+      - "8001:8001"
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"

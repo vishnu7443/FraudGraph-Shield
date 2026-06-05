@@ -1,67 +1,68 @@
+# phase3/tests/test_api.py
+#
+# Integration tests using TestClient with injected mock dependencies.
+
 import pytest
 from fastapi.testclient import TestClient
-from unittest.mock import MagicMock, patch, AsyncMock
+from unittest.mock import MagicMock, AsyncMock
 import numpy as np
 
-# Mock the entire lifespan models loading
-@pytest.fixture(scope="module", autouse=True)
+
+@pytest.fixture(scope="module")
 def mock_app_state():
-    with patch('phase3.api.main.RiskFusionEngine') as mock_engine_cls, \
-         patch('phase3.api.main.InMemoryFeatureStore') as mock_store_cls, \
-         patch('phase3.api.main.ActionEngine') as mock_action_cls:
-         
-        # Set up mock instances
-        mock_engine = MagicMock()
-        mock_engine.score_transaction = AsyncMock(return_value={
-            "account_id": 100,
-            "composite_score": 45.2,
-            "risk_tier": "MEDIUM",
-            "automated_action": "MONITOR",
-            "lgbm_score": 0.35,
-            "gnn_mule_score": 0.55,
-            "cfms_alert_active": False,
-            "cfms_alert_age_hours": None,
-            "top_shap_factors": [],
-            "inference_latency_ms": 1.25,
-            "model_version": "v1.0.0"
-        })
-        
-        # Mock detector inside engine
-        mock_detector = MagicMock()
-        mock_detector.get_cluster.return_value = [101, 102]
-        mock_detector.score_account.return_value = 0.45
-        
-        # Mock PyG data for cluster unscaling
-        mock_pyg = MagicMock()
-        mock_pyg.x = MagicMock()
-        
-        # Mock __getitem__ on pyg_data.x to return a mock tensor
-        mock_tensor = MagicMock()
-        mock_tensor.cpu.return_value.numpy.return_value.reshape.return_value = np.zeros((1, 74))
-        mock_pyg.x.__getitem__.return_value = mock_tensor
-        mock_detector.pyg_data = mock_pyg
-        
-        # Mock scaler in detector
-        mock_scaler = MagicMock()
-        mock_scaler.inverse_transform.return_value = np.zeros((1, 74))
-        mock_detector.scaler = mock_scaler
-        
-        mock_engine.detector = mock_detector
-        mock_engine_cls.return_value = mock_engine
-        
-        # Mock feature store
-        mock_store = MagicMock()
-        mock_store.get.side_effect = lambda acc_id: np.zeros(300) if acc_id == 100 else None
-        mock_store.health_check.return_value = True
-        mock_store_cls.return_value = mock_store
-        
-        # Mock action engine
-        mock_action = MagicMock()
-        mock_action_cls.return_value = mock_action
-        
-        from phase3.api.main import app
-        with TestClient(app) as client:
-            yield client, mock_engine, mock_store, mock_action
+    """Create a FastAPI app with fully mocked dependencies via create_app()."""
+    # --- fusion engine mock ---
+    mock_engine = MagicMock()
+    mock_engine.score_transaction = AsyncMock(return_value={
+        "account_id": 100,
+        "composite_score": 45.2,
+        "risk_tier": "MEDIUM",
+        "automated_action": "MONITOR",
+        "lgbm_score": 0.35,
+        "gnn_mule_score": 0.55,
+        "cfms_alert_active": False,
+        "cfms_alert_age_hours": None,
+        "top_shap_factors": [],
+        "inference_latency_ms": 1.25,
+        "model_version": "v1.0.0"
+    })
+
+    # Mock detector inside engine
+    mock_detector = MagicMock()
+    mock_detector.get_cluster.return_value = [101, 102]
+    mock_detector.score_account.return_value = 0.45
+
+    # Mock PyG data for cluster unscaling
+    mock_pyg = MagicMock()
+    mock_tensor = MagicMock()
+    mock_tensor.cpu.return_value.numpy.return_value.reshape.return_value = np.zeros((1, 74))
+    mock_pyg.x.__getitem__ = MagicMock(return_value=mock_tensor)
+    mock_detector.pyg_data = mock_pyg
+
+    # Mock scaler in detector
+    mock_scaler = MagicMock()
+    mock_scaler.inverse_transform.return_value = np.zeros((1, 74))
+    mock_detector.scaler = mock_scaler
+
+    mock_engine.detector = mock_detector
+
+    # --- feature store mock ---
+    mock_store = MagicMock()
+    mock_store.get.side_effect = lambda acc_id: np.zeros(300) if acc_id != 999 else None
+    mock_store.health_check.return_value = True
+
+    # --- action engine mock ---
+    mock_action = MagicMock()
+
+    from phase3.api.main import create_app
+    app = create_app(
+        engine=mock_engine,
+        feature_store=mock_store,
+        action_engine=mock_action,
+    )
+    with TestClient(app) as client:
+        yield client, mock_engine, mock_store, mock_action
+
 
 def test_api_health(mock_app_state):
     client, _, _, _ = mock_app_state
@@ -72,8 +73,23 @@ def test_api_health(mock_app_state):
     assert data["feature_store"] == "ok"
     assert data["models"] == "loaded"
 
+
 def test_api_score_success(mock_app_state):
-    client, _, _, _ = mock_app_state
+    client, mock_engine, _, _ = mock_app_state
+    # Override account_id in the mock return to match request
+    mock_engine.score_transaction = AsyncMock(return_value={
+        "account_id": 100,
+        "composite_score": 45.2,
+        "risk_tier": "MEDIUM",
+        "automated_action": "MONITOR",
+        "lgbm_score": 0.35,
+        "gnn_mule_score": 0.55,
+        "cfms_alert_active": False,
+        "cfms_alert_age_hours": None,
+        "top_shap_factors": [],
+        "inference_latency_ms": 1.25,
+        "model_version": "v1.0.0"
+    })
     req_body = {
         "account_id": 100,
         "transaction_amount": 50000.0,
@@ -90,10 +106,11 @@ def test_api_score_success(mock_app_state):
     assert data["risk_tier"] == "MEDIUM"
     assert data["automated_action"] == "MONITOR"
 
+
 def test_api_score_not_found(mock_app_state):
     client, _, _, _ = mock_app_state
     req_body = {
-        "account_id": 999,  # Not found
+        "account_id": 999,  # Not found — store returns None
         "transaction_amount": 100.0,
         "channel": "NEFT",
         "hour_of_day": 10
@@ -102,8 +119,23 @@ def test_api_score_not_found(mock_app_state):
     assert response.status_code == 404
     assert "not found" in response.json()["detail"]
 
+
 def test_api_score_batch(mock_app_state):
-    client, _, _, _ = mock_app_state
+    client, mock_engine, _, _ = mock_app_state
+    # Both accounts score, but 999 has no features
+    mock_engine.score_transaction = AsyncMock(return_value={
+        "account_id": 100,
+        "composite_score": 45.2,
+        "risk_tier": "MEDIUM",
+        "automated_action": "MONITOR",
+        "lgbm_score": 0.35,
+        "gnn_mule_score": 0.55,
+        "cfms_alert_active": False,
+        "cfms_alert_age_hours": None,
+        "top_shap_factors": [],
+        "inference_latency_ms": 1.25,
+        "model_version": "v1.0.0"
+    })
     req_body = {
         "requests": [
             {
@@ -125,6 +157,7 @@ def test_api_score_batch(mock_app_state):
     data = response.json()
     assert len(data) == 1
     assert data[0]["account_id"] == 100
+
 
 def test_api_cluster_success(mock_app_state):
     client, _, _, _ = mock_app_state

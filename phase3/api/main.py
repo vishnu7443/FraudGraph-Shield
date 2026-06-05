@@ -22,45 +22,67 @@ from core.action_engine import ActionEngine
 
 logger = structlog.get_logger()
 
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    # Startup: load all models into memory once
-    logger.info("loading_models")
-    app.state.fusion_engine = RiskFusionEngine()
-    
-    # Resolve preprocessor path dynamically to handle multiple start locations
-    preprocessor_path = resolve_path("../phase1/models/preprocessor.pkl")
-    app.state.feature_store = InMemoryFeatureStore(preprocessor_path)
-    
-    app.state.action_engine = ActionEngine()
+
+def create_app(
+    engine=None,
+    feature_store=None,
+    action_engine=None,
+) -> FastAPI:
+    """Factory function to create the FastAPI app. Accepts optional pre-built
+    dependencies so tests can inject mocks without loading real models."""
+
+    application = FastAPI(
+        title="FraudGraph Shield API",
+        description="Real-time mule account and transaction fraud detection",
+        version="1.0.0"
+    )
+
+    # Initialize application state — use provided objects or create real ones
+    if engine is None:
+        logger.info("loading_models")
+        engine = RiskFusionEngine()
+    if feature_store is None:
+        preprocessor_path = resolve_path("../phase1/models/preprocessor.pkl")
+        feature_store = InMemoryFeatureStore(preprocessor_path)
+    if action_engine is None:
+        action_engine = ActionEngine()
+
+    application.state.fusion_engine = engine
+    application.state.feature_store = feature_store
+    application.state.action_engine = action_engine
     logger.info("models_loaded")
-    yield
-    # Shutdown cleanup
-    logger.info("shutdown")
 
-app = FastAPI(
-    title="FraudGraph Shield API",
-    description="Real-time mule account and transaction fraud detection",
-    version="1.0.0",
-    lifespan=lifespan
-)
+    @asynccontextmanager
+    async def lifespan(app: FastAPI):
+        logger.info("startup_complete")
+        yield
+        logger.info("shutdown")
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],  # restrict in production
-    allow_methods=["*"],
-    allow_headers=["*"]
-)
+    application.router.lifespan_context = lifespan
 
-# Request latency middleware
-@app.middleware("http")
-async def add_latency_header(request: Request, call_next):
-    start = time.perf_counter()
-    response = await call_next(request)
-    latency = (time.perf_counter() - start) * 1000
-    response.headers["X-Latency-Ms"] = str(round(latency, 2))
-    return response
+    application.add_middleware(
+        CORSMiddleware,
+        allow_origins=["*"],  # restrict in production
+        allow_methods=["*"],
+        allow_headers=["*"]
+    )
 
-app.include_router(score.router,   prefix="/api/v1", tags=["Scoring"])
-app.include_router(cluster.router, prefix="/api/v1", tags=["Network"])
-app.include_router(health.router,  prefix="/api/v1", tags=["Health"])
+    # Request latency middleware
+    @application.middleware("http")
+    async def add_latency_header(request: Request, call_next):
+        start = time.perf_counter()
+        response = await call_next(request)
+        latency = (time.perf_counter() - start) * 1000
+        response.headers["X-Latency-Ms"] = str(round(latency, 2))
+        return response
+
+    application.include_router(score.router,   prefix="/api/v1", tags=["Scoring"])
+    application.include_router(cluster.router, prefix="/api/v1", tags=["Network"])
+    application.include_router(health.router,  prefix="/api/v1", tags=["Health"])
+
+    return application
+
+
+# Module-level app for uvicorn: `uvicorn api.main:app`
+# This only runs when the module is imported for the first time with real models.
+app = create_app()

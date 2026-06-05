@@ -92,6 +92,11 @@ class InMemoryFeatureStore(FeatureStore):
         self._cache: Dict[int, np.ndarray] = {}
 
     def get(self, account_id: int) -> Optional[np.ndarray]:
+        if account_id not in self._cache:
+            num_features = len(self.preprocessor.feature_names_) if hasattr(self.preprocessor, "feature_names_") else 300
+            if num_features == 0:
+                num_features = 300
+            self._cache[account_id] = np.zeros(num_features, dtype=np.float32)
         return self._cache.get(account_id)
 
     def set(self, account_id: int, features: np.ndarray) -> None:

@@ -1,0 +1,135 @@
+{
+  "info": {
+    "name": "FraudGraph Shield API v1",
+    "description": "Complete Postman collection for the FraudGraph Shield Phase 3 API. Covers single scoring, batch scoring, cluster retrieval, and health check endpoints.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "base_url", "value": "http://localhost:8000" },
+    { "key": "cfms_url", "value": "http://localhost:8001" }
+  ],
+  "item": [
+    {
+      "name": "Health Check",
+      "request": {
+        "method": "GET",
+        "url": "{{base_url}}/api/v1/health",
+        "header": []
+      }
+    },
+    {
+      "name": "Score Transaction — UPI Late Night",
+      "request": {
+        "method": "POST",
+        "url": "{{base_url}}/api/v1/score",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"account_id\": 0,\n  \"transaction_amount\": 50000.0,\n  \"channel\": \"UPI\",\n  \"is_new_counterparty\": true,\n  \"is_round_amount\": true,\n  \"hour_of_day\": 2\n}"
+        }
+      }
+    },
+    {
+      "name": "Score Transaction — NEFT Daytime",
+      "request": {
+        "method": "POST",
+        "url": "{{base_url}}/api/v1/score",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"account_id\": 42,\n  \"transaction_amount\": 10000.0,\n  \"channel\": \"NEFT\",\n  \"is_new_counterparty\": false,\n  \"is_round_amount\": false,\n  \"hour_of_day\": 14\n}"
+        }
+      }
+    },
+    {
+      "name": "Score Transaction — High Amount RTGS",
+      "request": {
+        "method": "POST",
+        "url": "{{base_url}}/api/v1/score",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"account_id\": 100,\n  \"transaction_amount\": 500000.0,\n  \"channel\": \"RTGS\",\n  \"is_new_counterparty\": true,\n  \"is_round_amount\": true,\n  \"hour_of_day\": 3\n}"
+        }
+      }
+    },
+    {
+      "name": "Batch Score — 3 Accounts",
+      "request": {
+        "method": "POST",
+        "url": "{{base_url}}/api/v1/score/batch",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"requests\": [\n    { \"account_id\": 0,  \"transaction_amount\": 5000,   \"channel\": \"UPI\",  \"hour_of_day\": 9  },\n    { \"account_id\": 10, \"transaction_amount\": 75000,  \"channel\": \"NEFT\", \"hour_of_day\": 3  },\n    { \"account_id\": 50, \"transaction_amount\": 120000, \"channel\": \"RTGS\", \"hour_of_day\": 22 }\n  ]\n}"
+        }
+      }
+    },
+    {
+      "name": "Cluster Retrieval — 2-hop",
+      "request": {
+        "method": "POST",
+        "url": "{{base_url}}/api/v1/cluster",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"account_id\": 0,\n  \"hop_depth\": 2\n}"
+        }
+      }
+    },
+    {
+      "name": "Cluster Retrieval — 3-hop",
+      "request": {
+        "method": "POST",
+        "url": "{{base_url}}/api/v1/cluster",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"account_id\": 42,\n  \"hop_depth\": 3\n}"
+        }
+      }
+    },
+    {
+      "name": "Invalid Amount — Expect 422",
+      "request": {
+        "method": "POST",
+        "url": "{{base_url}}/api/v1/score",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"account_id\": 0,\n  \"transaction_amount\": -100.0,\n  \"channel\": \"UPI\",\n  \"hour_of_day\": 10\n}"
+        }
+      }
+    },
+    {
+      "name": "CFMS Health Check",
+      "request": {
+        "method": "GET",
+        "url": "{{cfms_url}}/cfms/health",
+        "header": []
+      }
+    },
+    {
+      "name": "CFMS Alert Lookup",
+      "request": {
+        "method": "GET",
+        "url": "{{cfms_url}}/cfms/alert/42",
+        "header": []
+      }
+    }
+  ]
+}
