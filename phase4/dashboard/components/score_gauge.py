@@ -3,6 +3,7 @@
 # Score gauge component using Plotly. Renders a stunning radial speed-like
 # indicator colored dynamically based on the composite score thresholds.
 
+# pyrefly: ignore [missing-import]
 import plotly.graph_objects as go
 
 def render_score_gauge(score: float) -> go.Figure:
@@ -42,7 +43,7 @@ def render_score_gauge(score: float) -> go.Figure:
                 'tickvals': [0, 20, 40, 60, 80, 100],
                 'ticktext': ["0", "20", "40", "60", "80", "100"]
             },
-            'bar': {'color': bar_color, 'width': 4},
+            'bar': {'color': bar_color, 'thickness': 0.75},
             'bgcolor': "rgba(31, 41, 55, 0.5)",
             'borderwidth': 1.5,
             'bordercolor': "#4b5563",
