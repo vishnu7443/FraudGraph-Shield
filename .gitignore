@@ -11,3 +11,6 @@ test_plots/
 piptemp/
 tmp/
 *.log
+*.pt
+*.joblib
+*.pkl
