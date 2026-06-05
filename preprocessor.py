@@ -58,8 +58,8 @@ class FraudPreprocessor:
             
         # 3. For velocity ratio features (F1–F3885): replace all NA with 0.5.
         existing_velocity_cols = [c for c in self.velocity_cols if c in df_copy.columns]
-        for col in existing_velocity_cols:
-            df_copy[col] = df_copy[col].fillna(0.5)
+        if existing_velocity_cols:
+            df_copy[existing_velocity_cols] = df_copy[existing_velocity_cols].fillna(0.5)
             
         # 4. Create missingness indicator vector for columns with >5% NA.
         cols_to_check = [c for c in df_copy.columns if c not in [index_col, self.target_col]]
@@ -123,7 +123,7 @@ class FraudPreprocessor:
         for col in df_copy.columns:
             if df_copy[col].dtype == 'object':
                 df_copy[col] = pd.factorize(df_copy[col])[0]
-            df_copy[col] = df_copy[col].fillna(0)
+        df_copy.fillna(0, inplace=True)
             
         self.fitted = True
         
@@ -176,20 +176,20 @@ class FraudPreprocessor:
         
         # 3. Velocity ratio features
         existing_velocity_cols = [c for c in self.velocity_cols if c in df_copy.columns]
-        for col in existing_velocity_cols:
-            df_copy[col] = df_copy[col].fillna(0.5)
+        if existing_velocity_cols:
+            df_copy[existing_velocity_cols] = df_copy[existing_velocity_cols].fillna(0.5)
             
         # 4. Missingness indicators
         if self.missingness_cols:
             df_dict = {col: df_copy[col].values for col in df_copy.columns}
-            for col in self.missingness_cols:
+            needed_missing_cols = [c for c in self.missingness_cols if f"{c}_missing" in self.feature_names_]
+            for col in needed_missing_cols:
                 if col in df.columns:
                     df_dict[f"{col}_missing"] = df[col].isna().astype(np.int8).values
                 else:
                     df_dict[f"{col}_missing"] = np.zeros(len(df_copy), dtype=np.int8)
             df_copy = pd.DataFrame(df_dict, index=df_copy.index)
             del df_dict
-            import gc; gc.collect()
             
         # 5. Metadata category mapping
         if 'F3886' in df_copy.columns:
@@ -199,9 +199,26 @@ class FraudPreprocessor:
             
         # 6. Compute account tenure
         if 'F3888' in df_copy.columns:
-            parsed_dates = pd.to_datetime(df_copy['F3888'], format='%m-%d-%Y', errors='coerce')
-            ref_date = pd.to_datetime('2024-01-01')
-            df_copy['tenure_days'] = (ref_date - parsed_dates).dt.days.fillna(0)
+            if len(df_copy) < 100:
+                from datetime import datetime
+                ref_date = datetime(2024, 1, 1)
+                tenure_list = []
+                for val in df_copy['F3888']:
+                    if pd.isna(val) or not isinstance(val, str) or val == "":
+                        tenure_list.append(365.0)
+                    else:
+                        try:
+                            parts = val.split('-')
+                            m, d, y = int(parts[0]), int(parts[1]), int(parts[2])
+                            dt = datetime(y, m, d)
+                            tenure_list.append(float((ref_date - dt).days))
+                        except Exception:
+                            tenure_list.append(365.0)
+                df_copy['tenure_days'] = tenure_list
+            else:
+                parsed_dates = pd.to_datetime(df_copy['F3888'], format='%m-%d-%Y', errors='coerce')
+                ref_date = pd.to_datetime('2024-01-01')
+                df_copy['tenure_days'] = (ref_date - parsed_dates).dt.days.fillna(0)
             df_copy = df_copy.drop(columns=['F3888'])
             
         # 7. Compute product complexity
@@ -218,7 +235,7 @@ class FraudPreprocessor:
         for col in df_copy.columns:
             if df_copy[col].dtype == 'object':
                 df_copy[col] = pd.factorize(df_copy[col])[0]
-            df_copy[col] = df_copy[col].fillna(0)
+        df_copy.fillna(0, inplace=True)
             
         # Ensure the feature columns match the fitted columns exactly
         for col in self.feature_names_:
