@@ -211,7 +211,255 @@ def score_batch(requests: list) -> List[Dict]:
         results.append(mock_score)
     return results
 
+DEMO_CRYPTO_ALERTS = [
+    {
+        "alert_id": "ALT-1242-1718300000",
+        "txn_id": "TXN-982736192",
+        "account_id": 1242,
+        "exchange": "WAZIRX",
+        "amount": 75000.0,
+        "risk_score": 88.5,
+        "severity": "CRITICAL",
+        "hold_reason": "Funds exiting to high-risk VDA provider WAZIRX (Manual trigger)",
+        "timestamp": "2026-06-14T02:15:30Z",
+        "status": "OPEN"
+    },
+    {
+        "alert_id": "ALT-1240-1718301000",
+        "txn_id": "TXN-102938475",
+        "account_id": 1240,
+        "exchange": "COINDCX",
+        "amount": 120000.0,
+        "risk_score": 92.1,
+        "severity": "CRITICAL",
+        "hold_reason": "Funds exiting to high-risk VDA provider COINDCX (Manual trigger)",
+        "timestamp": "2026-06-14T03:45:00Z",
+        "status": "OPEN"
+    },
+    {
+        "alert_id": "ALT-8234-1718302000",
+        "txn_id": "TXN-564738291",
+        "account_id": 8234,
+        "exchange": "BINANCE",
+        "amount": 45000.0,
+        "risk_score": 68.1,
+        "severity": "HIGH",
+        "hold_reason": "Funds exiting to high-risk VDA provider BINANCE (Manual trigger)",
+        "timestamp": "2026-06-14T04:10:15Z",
+        "status": "OPEN"
+    },
+    {
+        "alert_id": "ALT-2198-1718303000",
+        "txn_id": "TXN-847362910",
+        "account_id": 2198,
+        "exchange": "COINSWITCH",
+        "amount": 25000.0,
+        "risk_score": 47.9,
+        "severity": "MEDIUM",
+        "hold_reason": "Funds exiting to high-risk VDA provider COINSWITCH (Manual trigger)",
+        "timestamp": "2026-06-14T04:30:00Z",
+        "status": "OPEN"
+    },
+    {
+        "alert_id": "ALT-6734-1718304000",
+        "txn_id": "TXN-382910475",
+        "account_id": 6734,
+        "exchange": "ZEBPAY",
+        "amount": 15000.0,
+        "risk_score": 44.2,
+        "severity": "MEDIUM",
+        "hold_reason": "Funds exiting to high-risk VDA provider ZEBPAY (Manual trigger)",
+        "timestamp": "2026-06-14T05:05:00Z",
+        "status": "RESOLVED"
+    }
+]
+
 def get_demo_score(account_id: int) -> Dict:
     """Directly fetch demo scores for presentation fallback UI."""
     return _safe_get_score(account_id)
+
+def get_crypto_alerts() -> List[Dict]:
+    """Retrieves crypto exit detection alerts from backend or falls back to demo data."""
+    if st.session_state.get("use_demo"):
+        return DEMO_CRYPTO_ALERTS.copy()
+        
+    resp = _get("/crypto-alerts")
+    if resp is not None:
+        return resp
+        
+    return DEMO_CRYPTO_ALERTS.copy()
+
+
+def _get_mock_vault_profile(hashed_id: str) -> Dict:
+    """Generates mock profile and alert history data when in offline / demo mode."""
+    import hashlib
+    # Match standard demo account IDs
+    h1247 = hashlib.sha256(b"1247").hexdigest()
+    h3891 = hashlib.sha256(b"3891").hexdigest()
+    
+    if hashed_id == h1247 or hashed_id == "1247" or hashed_id == "abc123":
+        return {
+            "profile": {
+                "account_id": 1247,
+                "hashed_id": h1247,
+                "name": "Arjun Mehta",
+                "phone": "+91 98765 43210",
+                "pan": "BVPPM7812K",
+                "email": "arjun.mehta@outlook.com",
+                "created_at": "2025-01-15T10:30:00Z"
+            },
+            "summary": {
+                "total_alerts": 3,
+                "highest_risk": 88.5,
+                "last_alert": "2026-06-14"
+            },
+            "alerts": [
+                {
+                    "alert_id": "VALT-1718300000-1247",
+                    "hashed_id": h1247,
+                    "risk_score": 88.5,
+                    "alert_type": "FUSION_ENGINE_ALERT",
+                    "category": "Transaction Risk",
+                    "source": "Fusion Engine",
+                    "notes": "Automated risk threshold breach: score=88.5, tier=HIGH",
+                    "created_at": "2026-06-14T02:15:30Z"
+                },
+                {
+                    "alert_id": "VALT-1718200000-1247",
+                    "hashed_id": h1247,
+                    "risk_score": 75.2,
+                    "alert_type": "CRYPTO_EXIT",
+                    "category": "Crypto Risk",
+                    "source": "Crypto Detector",
+                    "notes": "Funds routing to high-risk VDA exchange WazirX",
+                    "created_at": "2026-06-13T18:40:00Z"
+                },
+                {
+                    "alert_id": "VALT-1718100000-1247",
+                    "hashed_id": h1247,
+                    "risk_score": 62.0,
+                    "alert_type": "MULE_ACCOUNT",
+                    "category": "Identity Risk",
+                    "source": "Manual Investigator",
+                    "notes": "Flagged during physical address verification run",
+                    "created_at": "2026-06-12T11:15:00Z"
+                }
+            ]
+        }
+    elif hashed_id == h3891 or hashed_id == "3891":
+        return {
+            "profile": {
+                "account_id": 3891,
+                "hashed_id": h3891,
+                "name": "Priya Sharma",
+                "phone": "+91 91234 56789",
+                "pan": "APOPS2941L",
+                "email": "priya.sharma@gmail.com",
+                "created_at": "2025-03-22T08:12:00Z"
+            },
+            "summary": {
+                "total_alerts": 1,
+                "highest_risk": 45.0,
+                "last_alert": "2026-06-10"
+            },
+            "alerts": [
+                {
+                    "alert_id": "VALT-1718000000-3891",
+                    "hashed_id": h3891,
+                    "risk_score": 45.0,
+                    "alert_type": "SUSPICIOUS_PAYEE",
+                    "category": "Network Risk",
+                    "source": "Fusion Engine",
+                    "notes": "Frequent small round-amount UPI transfers to unverified numbers",
+                    "created_at": "2026-06-10T14:22:00Z"
+                }
+            ]
+        }
+    else:
+        # Default fallback for arbitrary account hashes
+        cleaned_hash = hashed_id if len(hashed_id) > 10 else f"HASH-{hashed_id}-DEMO"
+        return {
+            "profile": {
+                "account_id": 5042,
+                "hashed_id": cleaned_hash,
+                "name": "Vikram Singh",
+                "phone": "+91 98888 77777",
+                "pan": "AHYPT1982A",
+                "email": "vikram.singh@yahoo.com",
+                "created_at": "2025-05-18T16:00:00Z"
+            },
+            "summary": {
+                "total_alerts": 0,
+                "highest_risk": 0.0,
+                "last_alert": "NEVER"
+            },
+            "alerts": []
+        }
+
+
+def get_vault_profile(hashed_id: str) -> Optional[Dict]:
+    """Retrieves vault account profile details, summary, and alert history."""
+    if st.session_state.get("use_demo"):
+        return _get_mock_vault_profile(hashed_id)
+        
+    resp = _get(f"/vault/account/{hashed_id}")
+    if resp is not None:
+        return resp
+        
+    return _get_mock_vault_profile(hashed_id)
+
+
+def create_vault_alert(hashed_id: str, risk_score: float, alert_type: str, category: str, source: str, notes: str = "") -> Optional[Dict]:
+    """Creates a fraud alert in the secure vault."""
+    import time
+    payload = {
+        "hashed_id": hashed_id,
+        "risk_score": risk_score,
+        "alert_type": alert_type,
+        "category": category,
+        "source": source,
+        "notes": notes
+    }
+    if st.session_state.get("use_demo"):
+        # Save alert dynamically in mock session state to show update feedback
+        if "mock_alerts" not in st.session_state:
+            st.session_state["mock_alerts"] = {}
+        if hashed_id not in st.session_state["mock_alerts"]:
+            st.session_state["mock_alerts"][hashed_id] = []
+            
+        mock_id = f"VALT-{int(time.time())}-{hashed_id[:8]}"
+        new_alert = {
+            "alert_id": mock_id,
+            "hashed_id": hashed_id,
+            "risk_score": risk_score,
+            "alert_type": alert_type,
+            "category": category,
+            "source": source,
+            "notes": notes,
+            "created_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+        }
+        st.session_state["mock_alerts"][hashed_id].insert(0, new_alert)
+        return {"success": True, "alert_id": mock_id}
+        
+    resp = _post("/vault/alert", payload)
+    if resp is not None:
+        return resp
+        
+    return {"success": True, "alert_id": f"MOCK-{int(time.time())}"}
+
+
+def get_vault_alerts(hashed_id: str) -> List[Dict]:
+    """Retrieves only alert log history for an account hash."""
+    if st.session_state.get("use_demo"):
+        profile_data = _get_mock_vault_profile(hashed_id)
+        base_alerts = profile_data.get("alerts", [])
+        dyn_alerts = st.session_state.get("mock_alerts", {}).get(hashed_id, [])
+        return dyn_alerts + base_alerts
+        
+    resp = _get(f"/vault/alerts/{hashed_id}")
+    if resp is not None:
+        return resp
+        
+    return _get_mock_vault_profile(hashed_id).get("alerts", [])
+
 

@@ -17,6 +17,8 @@ from storage.db import db_instance
 from models.crypto_alert import CryptoAlert
 from services.str_generator import str_generator
 from services.travel_rule import travel_rule_logger
+from vault.hash_utils import hash_account_id
+from services.cahv_service import cahv_service
 
 
 # Dynamically add phase1 and phase2 directories to sys.path using absolute paths
@@ -356,6 +358,18 @@ class RiskFusionEngine:
                 txn_id=txn_id,
                 risk_score=round(composite, 2),
                 action=action
+            )
+
+        # Trigger CAHV alert automatically if risk score exceeds threshold
+        if composite > settings.VAULT_ALERT_THRESHOLD:
+            hashed_id = hash_account_id(account_id)
+            cahv_service.create_alert(
+                hashed_id=hashed_id,
+                risk_score=composite,
+                alert_type="FUSION_ENGINE_ALERT",
+                category="Transaction Risk",
+                source="Fusion Engine",
+                notes=f"Automated risk threshold breach: score={composite:.2f}, tier={risk_tier}, action={action}"
             )
 
 
