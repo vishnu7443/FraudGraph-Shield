@@ -25,7 +25,8 @@ async def score_transaction(request: Request, body: TransactionScoreRequest):
         "is_round_amount": body.is_round_amount,
         "is_new_counterparty": body.is_new_counterparty,
         "hour_of_day": body.hour_of_day,
-        "transaction_amount": body.transaction_amount
+        "transaction_amount": body.transaction_amount,
+        "destination_name": body.destination_name
     }
 
     result = await engine.score_transaction(body.account_id, features, transaction_context)
@@ -51,9 +52,11 @@ async def score_batch(request: Request, body: BatchScoreRequest):
             "is_round_amount": req.is_round_amount,
             "is_new_counterparty": req.is_new_counterparty,
             "hour_of_day": req.hour_of_day,
-            "transaction_amount": req.transaction_amount
+            "transaction_amount": req.transaction_amount,
+            "destination_name": req.destination_name
         }
         result = await engine.score_transaction(req.account_id, features, ctx)
+
         action_engine.execute(req.account_id, result["automated_action"],
                               result["composite_score"], result)
         return TransactionScoreResponse(**result)

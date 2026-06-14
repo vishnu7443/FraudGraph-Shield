@@ -31,6 +31,10 @@ class TransactionScoreResponse(BaseModel):
     top_shap_factors: List[SHAPExplanation]  # top 5
     inference_latency_ms: float
     model_version: str
+    crypto_detected: Optional[bool] = False
+    crypto_exchange: Optional[str] = None
+    crypto_confidence: Optional[float] = 0.0
+
 
 class ClusterNode(BaseModel):
     account_id: int

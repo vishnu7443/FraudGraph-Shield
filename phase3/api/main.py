@@ -15,7 +15,7 @@ if phase3_dir not in sys.path:
     sys.path.append(phase3_dir)
 
 # Import routes, engine, store and action engine
-from api.routes import score, cluster, health
+from api.routes import score, cluster, health, crypto
 from core.fusion_engine import RiskFusionEngine, resolve_path
 from core.feature_store import InMemoryFeatureStore
 from core.action_engine import ActionEngine
@@ -79,8 +79,10 @@ def create_app(
     application.include_router(score.router,   prefix="/api/v1", tags=["Scoring"])
     application.include_router(cluster.router, prefix="/api/v1", tags=["Network"])
     application.include_router(health.router,  prefix="/api/v1", tags=["Health"])
+    application.include_router(crypto.router,  prefix="/api/v1", tags=["Crypto"])
 
     return application
+
 
 
 # Module-level app for uvicorn: `uvicorn api.main:app`

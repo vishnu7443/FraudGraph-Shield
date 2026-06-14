@@ -23,6 +23,8 @@ class TransactionScoreRequest(BaseModel):
     is_round_amount: bool = False
     hour_of_day: int = Field(..., ge=0, le=23)
     counterparty_account_id: Optional[int] = None
+    destination_name: Optional[str] = Field(None, description="Name of payee/destination account (e.g. WazirX)")
+
 
     @validator('transaction_amount')
     def amount_must_be_positive(cls, v):

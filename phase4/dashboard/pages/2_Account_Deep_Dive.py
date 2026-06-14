@@ -105,22 +105,21 @@ with st.container(border=True):
     st.subheader(f"⚡ Live Transaction Simulator (Account #{account_id})")
     st.write("Modify the parameters below to test how the AI composite score reacts in real time:")
     
-    col1, col2, col3, col4 = st.columns(4)
+    col1, col2, col3, col4, col5 = st.columns(5)
     amount   = col1.number_input("Transaction Amount (₹)", value=50000, step=1000,
                                  help="The monetary value of the incoming/outgoing transfer in Indian Rupees (INR). Spikes in amounts trigger transaction model alerts.")
     channel  = col2.selectbox("Channel", ["UPI", "NEFT", "RTGS", "ATM", "MOBILE"],
                               help="The channel used for the transfer. High-velocity UPI transfers are typical in automated fraud, while RTGS/NEFT are for larger amounts.")
     hour     = col3.slider("Hour of Day", 0, 23, 14,
                            help="The hour at which the transfer was initiated. Midnight transfers (11 PM - 4 AM) are flagged as high risk.")
-    new_cp   = col4.checkbox("New Counterparty",
+    dest_name = col4.text_input("Destination / Payee", value="",
+                                help="Payee name or destination account owner. Enter WazirX or CoinDCX to test high-risk crypto exit detection.")
+    new_cp   = col5.checkbox("New Counterparty",
                              help="Check if the destination account has never transacted with the sender before. New connections have higher risk weighting.")
 
     if st.button("⚡ Score Transaction", type="primary"):
         with st.spinner("Scoring..."):
-            if use_demo:
-                result = DEMO_SCORES.get(str(account_id), DEMO_SCORES.get(account_id, list(DEMO_SCORES.values())[0]))
-            else:
-                result = score_transaction(account_id, amount, channel, hour, new_cp)
+            result = score_transaction(account_id, amount, channel, hour, new_cp, destination_name=dest_name)
 
         if result:
             st.session_state["last_result"] = result
@@ -133,7 +132,7 @@ st.divider()
 # Score display row inside a container card
 with st.container(border=True):
     st.subheader("📊 Threat Assessment Dashboard")
-    col1, col2, col3, col4, col5 = st.columns(5)
+    col1, col2, col3, col4, col5, col6 = st.columns(6)
     col1.metric("Composite Score", f"{result['composite_score']:.1f}/100", 
                 help="Unified Threat Rating: A weighted fusion combining transaction parameters (35%), network graph connections (40%), and government alerts (25%).")
     col2.metric("LightGBM Score",  f"{result['lgbm_score']:.3f}",
@@ -145,6 +144,12 @@ with st.container(border=True):
     cfms_text = "🚨 YES" if result["cfms_alert_active"] else "✅ NO"
     col5.metric("CFMS Alert", cfms_text,
                 help="Checks whether this account has an active case filed in the national I4C / FIU-IND cybercrime registries.")
+    
+    crypto_detected = result.get("crypto_detected", False)
+    crypto_text = f"🚨 {result.get('crypto_exchange')}" if crypto_detected else "✅ CLEAR"
+    col6.metric("Crypto Exit", crypto_text,
+                help="Checks whether the transaction destination matches any high-risk virtual digital asset (VDA) exchange aliases.")
+
 
 # Risk tier status bar
 tier_colors = {

@@ -75,7 +75,8 @@ def health_check() -> Dict:
 def score_transaction(account_id: int, amount: float,
                       channel: str, hour: int,
                       is_new_counterparty: bool = False,
-                      is_round_amount: bool = False) -> Dict:
+                      is_round_amount: bool = False,
+                      destination_name: Optional[str] = None) -> Dict:
     """Scores a transaction in real-time or falls back to demo data."""
     payload = {
         "account_id": account_id,
@@ -83,7 +84,8 @@ def score_transaction(account_id: int, amount: float,
         "channel": channel,
         "hour_of_day": hour,
         "is_new_counterparty": is_new_counterparty,
-        "is_round_amount": is_round_amount
+        "is_round_amount": is_round_amount,
+        "destination_name": destination_name
     }
     
     # Try calling backend API
@@ -97,7 +99,82 @@ def score_transaction(account_id: int, amount: float,
     mock_score = _safe_get_score(account_id)
     mock_score["account_id"] = account_id
     mock_score["is_mock"] = True
+    
+    # Simulate crypto detection in mock fallback if destination_name matches
+    if destination_name:
+        dest_upper = destination_name.strip().upper()
+        exchanges = ["WAZIRX", "COINDCX", "ZEBPAY", "BINANCE", "COINSWITCH", "BITBNS", "MUDREX"]
+        matched_ex = next((ex for ex in exchanges if ex in dest_upper), None)
+        if matched_ex:
+            mock_score["crypto_detected"] = True
+            mock_score["crypto_exchange"] = matched_ex
+            mock_score["crypto_confidence"] = 0.95
+            
+            # Apply mock score boost
+            original_score = mock_score.get("composite_score", 50.0)
+            if original_score > 40.0:
+                mock_score["composite_score"] = min(100.0, original_score + 20.0)
+            mock_score["automated_action"] = "HOLD"
+            if mock_score["risk_tier"] in ["LOW", "MEDIUM"]:
+                mock_score["risk_tier"] = "HIGH"
+        else:
+            mock_score["crypto_detected"] = False
+            mock_score["crypto_exchange"] = None
+            mock_score["crypto_confidence"] = 0.0
+    else:
+        mock_score["crypto_detected"] = False
+        mock_score["crypto_exchange"] = None
+        mock_score["crypto_confidence"] = 0.0
+
     return mock_score
+
+
+def get_crypto_alerts() -> List[Dict]:
+    """Fetches list of crypto alerts from backend or returns offline fallback mocks."""
+    resp = _get("/crypto-alerts")
+    if resp is not None:
+        return resp
+        
+    # Fallback offline mocks
+    return [
+        {
+            "alert_id": "ALT-1247-1723500000",
+            "txn_id": "TXN-1247-1723500000",
+            "account_id": 1247,
+            "exchange": "WAZIRX",
+            "amount": 95000.0,
+            "risk_score": 91.4,
+            "severity": "CRITICAL",
+            "hold_reason": "Funds exiting to high-risk VDA provider WAZIRX",
+            "timestamp": "2026-06-14T08:00:00Z",
+            "status": "OPEN"
+        },
+        {
+            "alert_id": "ALT-3891-1723510000",
+            "txn_id": "TXN-3891-1723510000",
+            "account_id": 3891,
+            "exchange": "COINDCX",
+            "amount": 42000.0,
+            "risk_score": 78.5,
+            "severity": "HIGH",
+            "hold_reason": "Funds exiting to high-risk VDA provider COINDCX",
+            "timestamp": "2026-06-14T07:12:00Z",
+            "status": "OPEN"
+        },
+        {
+            "alert_id": "ALT-5042-1723520000",
+            "txn_id": "TXN-5042-1723520000",
+            "account_id": 5042,
+            "exchange": "ZEBPAY",
+            "amount": 12000.0,
+            "risk_score": 55.2,
+            "severity": "MEDIUM",
+            "hold_reason": "Funds exiting to high-risk VDA provider ZEBPAY",
+            "timestamp": "2026-06-14T05:30:00Z",
+            "status": "RESOLVED"
+        }
+    ]
+
 
 def get_cluster(account_id: int, hop_depth: int = 2) -> Dict:
     """Retrieves cluster network nodes & edges from backend or falls back to demo data."""

@@ -4,9 +4,20 @@ import numpy as np
 import joblib
 import structlog
 import httpx
-from typing import Tuple, List
+from typing import Tuple, List, Optional
 import os
 import sys
+import asyncio
+import time
+
+# Import crypto detector, config, db, models, and logging generators
+from services.crypto_detector import detector
+from core.config import settings
+from storage.db import db_instance
+from models.crypto_alert import CryptoAlert
+from services.str_generator import str_generator
+from services.travel_rule import travel_rule_logger
+
 
 # Dynamically add phase1 and phase2 directories to sys.path using absolute paths
 current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -223,6 +234,68 @@ class RiskFusionEngine:
         else:
             return composite, "CRITICAL", "BLOCK"
 
+    async def process_crypto_alert(
+        self,
+        account_id: int,
+        exchange: str,
+        amount: float,
+        score: float,
+        txn_id: str
+    ):
+        try:
+            # 1. Determine severity based on config thresholds
+            if score >= settings.SEVERITY_THRESHOLD_CRITICAL:
+                severity = "CRITICAL"
+            elif score >= settings.SEVERITY_THRESHOLD_HIGH:
+                severity = "HIGH"
+            elif score >= settings.SEVERITY_THRESHOLD_MEDIUM:
+                severity = "MEDIUM"
+            else:
+                severity = "LOW"
+
+            hold_reason = f"Funds exiting to high-risk VDA provider {exchange}"
+            alert_id = f"ALT-{account_id}-{int(time.time())}"
+            timestamp = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+
+            # 2. Create alert object
+            alert = CryptoAlert(
+                alert_id=alert_id,
+                txn_id=txn_id,
+                account_id=account_id,
+                exchange=exchange,
+                amount=amount,
+                risk_score=score,
+                severity=severity,
+                hold_reason=hold_reason,
+                timestamp=timestamp,
+                status="OPEN"
+            )
+
+            # 3. Save to database
+            db_instance.save_alert(alert)
+
+            # 4. Generate STR Report
+            str_generator.generate_vda_str(
+                txn_id=txn_id,
+                account_id=account_id,
+                exchange=exchange,
+                amount=amount,
+                score=score,
+                hold_reason=hold_reason
+            )
+
+            # 5. Log Travel Rule
+            travel_rule_logger.log_travel_rule(
+                txn_id=txn_id,
+                account_id=account_id,
+                exchange=exchange,
+                amount=amount
+            )
+            
+            logger.info("crypto_alert_background_processing_done", alert_id=alert_id)
+        except Exception as e:
+            logger.error("crypto_alert_background_processing_failed", error=str(e))
+
     async def score_transaction(
         self,
         account_id: int,
@@ -245,6 +318,47 @@ class RiskFusionEngine:
             lgbm_score, gnn_score, cfms_score, transaction_context
         )
 
+        # Check for crypto exit detection
+        crypto_detected = False
+        exchange_name = None
+        confidence = 0.0
+        dest_name = transaction_context.get("destination_name")
+        if dest_name:
+            crypto_res = detector.detect_crypto(dest_name)
+            if crypto_res["is_crypto"]:
+                crypto_detected = True
+                exchange_name = crypto_res["exchange"]
+                confidence = crypto_res["confidence"]
+                if composite > 40.0:
+                    composite += crypto_res["risk_boost"]
+                    composite = min(100.0, composite)
+                
+                # Apply Force HOLD logic
+                action = "HOLD"
+                if risk_tier in ["LOW", "MEDIUM"]:
+                    risk_tier = "HIGH"
+
+        # Spawn background task if crypto is detected
+        if crypto_detected and exchange_name:
+            txn_id = f"TXN-{account_id}-{int(time.time())}"
+            asyncio.create_task(
+                self.process_crypto_alert(
+                    account_id=account_id,
+                    exchange=exchange_name,
+                    amount=transaction_context.get("transaction_amount", 0.0),
+                    score=composite,
+                    txn_id=txn_id
+                )
+            )
+            logger.warning(
+                f"Crypto exit detected: {exchange_name}",
+                exchange=exchange_name,
+                txn_id=txn_id,
+                risk_score=round(composite, 2),
+                action=action
+            )
+
+
         latency_ms = (time.perf_counter() - start) * 1000
 
         logger.info("transaction_scored",
@@ -266,5 +380,9 @@ class RiskFusionEngine:
             "cfms_alert_age_hours": alert_age_hours if alert_active else None,
             "top_shap_factors": shap_explanations,
             "inference_latency_ms": round(latency_ms, 2),
-            "model_version": "v1.0.0"
+            "model_version": "v1.0.0",
+            "crypto_detected": crypto_detected,
+            "crypto_exchange": exchange_name,
+            "crypto_confidence": confidence
         }
+

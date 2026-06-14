@@ -1,0 +1,44 @@
+[
+  {
+    "name": "WAZIRX",
+    "country": "India",
+    "risk_level": "HIGH",
+    "aliases": ["WAZIRX", "WAZIRX P2P", "WAZIRX INDIA", "WAZIRX TECHNOLOGIES", "WAZIR X"]
+  },
+  {
+    "name": "COINDCX",
+    "country": "India",
+    "risk_level": "HIGH",
+    "aliases": ["COINDCX", "COINDCX EXCHANGE", "COINDCX INDIA", "COIN DCX"]
+  },
+  {
+    "name": "ZEBPAY",
+    "country": "India",
+    "risk_level": "HIGH",
+    "aliases": ["ZEBPAY", "ZEBPAY INDIA", "ZEBPAY EXCHANGE", "ZEB PAY"]
+  },
+  {
+    "name": "BINANCE",
+    "country": "Global",
+    "risk_level": "HIGH",
+    "aliases": ["BINANCE P2P", "BINANCE INDIA", "BINANCE"]
+  },
+  {
+    "name": "COINSWITCH",
+    "country": "India",
+    "risk_level": "HIGH",
+    "aliases": ["COINSWITCH", "COINSWITCH KUBER", "COIN SWITCH"]
+  },
+  {
+    "name": "BITBNS",
+    "country": "India",
+    "risk_level": "HIGH",
+    "aliases": ["BITBNS", "BITBNS INDIA", "BIT BNS"]
+  },
+  {
+    "name": "MUDREX",
+    "country": "India",
+    "risk_level": "HIGH",
+    "aliases": ["MUDREX", "MUDREX INDIA"]
+  }
+]
