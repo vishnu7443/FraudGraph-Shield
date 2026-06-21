@@ -1,18 +1,21 @@
-from fastapi import APIRouter, Request, HTTPException
+from fastapi import APIRouter, Request, HTTPException, Depends
 from pydantic import BaseModel, Field
 from typing import List
 from models.crypto_alert import CryptoAlert
 from storage.db import db_instance
 import time
 
+# Import auth dependency
+from api.middleware.auth_dep import get_current_active_user
+
 router = APIRouter()
 
 @router.get("/crypto-alerts", response_model=List[CryptoAlert])
-async def get_crypto_alerts():
+async def get_crypto_alerts(current_user: dict = Depends(get_current_active_user)):
     return db_instance.get_all_alerts()
 
 @router.get("/crypto-alerts/{alert_id}", response_model=CryptoAlert)
-async def get_crypto_alert(alert_id: str):
+async def get_crypto_alert(alert_id: str, current_user: dict = Depends(get_current_active_user)):
     alert = db_instance.get_alert_by_id(alert_id)
     if not alert:
         raise HTTPException(status_code=404, detail=f"Alert {alert_id} not found")
@@ -26,7 +29,11 @@ class ManualAlertRequest(BaseModel):
     risk_score: float = Field(..., ge=0, le=100, description="Risk fusion score (0-100)")
 
 @router.post("/crypto-alerts/generate", response_model=CryptoAlert)
-async def generate_manual_alert(request: Request, body: ManualAlertRequest):
+async def generate_manual_alert(
+    request: Request, 
+    body: ManualAlertRequest,
+    current_user: dict = Depends(get_current_active_user)
+):
     from core.config import settings
     
     # 1. Determine alert severity

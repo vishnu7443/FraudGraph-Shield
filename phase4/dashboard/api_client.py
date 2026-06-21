@@ -7,6 +7,7 @@
 import httpx
 import streamlit as st
 import os
+import time
 from typing import Optional, Dict, List
 
 # Try importing demo data with package-relative path for pytest,
@@ -33,7 +34,10 @@ def check_backend_alive() -> bool:
 
 def _get(endpoint: str, params: dict = {}) -> Optional[Dict]:
     try:
-        resp = httpx.get(f"{API_BASE}{endpoint}", params=params, timeout=TIMEOUT)
+        headers = {}
+        if "jwt_token" in st.session_state and st.session_state["jwt_token"]:
+            headers["Authorization"] = f"Bearer {st.session_state['jwt_token']}"
+        resp = httpx.get(f"{API_BASE}{endpoint}", params=params, headers=headers, timeout=TIMEOUT)
         resp.raise_for_status()
         if "api_fallback" in st.session_state:
             st.session_state["api_fallback"] = False
@@ -44,7 +48,10 @@ def _get(endpoint: str, params: dict = {}) -> Optional[Dict]:
 
 def _post(endpoint: str, payload: dict) -> Optional[Dict]:
     try:
-        resp = httpx.post(f"{API_BASE}{endpoint}", json=payload, timeout=TIMEOUT)
+        headers = {}
+        if "jwt_token" in st.session_state and st.session_state["jwt_token"]:
+            headers["Authorization"] = f"Bearer {st.session_state['jwt_token']}"
+        resp = httpx.post(f"{API_BASE}{endpoint}", json=payload, headers=headers, timeout=TIMEOUT)
         resp.raise_for_status()
         if "api_fallback" in st.session_state:
             st.session_state["api_fallback"] = False
@@ -52,6 +59,20 @@ def _post(endpoint: str, payload: dict) -> Optional[Dict]:
     except Exception as e:
         st.session_state["api_fallback"] = True
         return None
+
+def login_api(username: str, password: str) -> Optional[Dict]:
+    """Authenticates credentials against the backend scoring API."""
+    try:
+        payload = {"username": username, "password": password}
+        resp = httpx.post(f"{API_BASE}/auth/login", json=payload, timeout=TIMEOUT)
+        if resp.status_code == 200:
+            return resp.json()
+        elif resp.status_code == 403 or resp.status_code == 401:
+            return {"error_detail": resp.json().get("detail", "Authentication failed")}
+        return None
+    except Exception as e:
+        return {"error_detail": f"Backend connection error: {str(e)}"}
+
 def _safe_get_score(account_id) -> Dict:
     res = DEMO_SCORES.get(account_id) or DEMO_SCORES.get(str(account_id))
     if not res:
@@ -461,5 +482,218 @@ def get_vault_alerts(hashed_id: str) -> List[Dict]:
         return resp
         
     return _get_mock_vault_profile(hashed_id).get("alerts", [])
+
+
+def require_login():
+    """
+    Blocks page execution using st.stop() if authentication is missing or invalid.
+    Renders a unified glassmorphic Analyst Login panel.
+    """
+    # Check if token exists
+    if "jwt_token" in st.session_state and st.session_state["jwt_token"]:
+        # Logged in. Display user badge in sidebar.
+        with st.sidebar:
+            st.sidebar.markdown(f"""
+            <div style="background: rgba(30, 41, 59, 0.45); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 8px; padding: 12px; margin-bottom: 15px;">
+                <p style="margin: 0; font-size: 10px; color: rgba(255,255,255,0.6); text-transform: uppercase; letter-spacing: 0.5px;">Logged In As</p>
+                <h4 style="margin: 3px 0; color: #ffffff; font-family:'Outfit', sans-serif;">{st.session_state.get('username', 'User')}</h4>
+                <p style="margin: 0; font-size: 11px; color: #10B981; font-weight: 700; text-transform: uppercase;">Role: {st.session_state.get('role', 'analyst')}</p>
+            </div>
+            """, unsafe_allow_html=True)
+            if st.sidebar.button("Logout 🔓", key="auth_logout_btn", use_container_width=True):
+                st.session_state["jwt_token"] = None
+                st.session_state["username"] = None
+                st.session_state["role"] = None
+                st.rerun()
+        return True
+
+    # Otherwise show premium login card
+    st.markdown("""
+        <style>
+            .login-container {
+                max-width: 480px;
+                margin: 50px auto 20px auto;
+                padding: 35px;
+                background: rgba(30, 41, 59, 0.45) !important;
+                border: 1px solid rgba(255, 255, 255, 0.08) !important;
+                border-radius: 16px !important;
+                box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.5) !important;
+                backdrop-filter: blur(12px) !important;
+                -webkit-backdrop-filter: blur(12px) !important;
+                text-align: center;
+            }
+            .login-title {
+                font-family: 'Outfit', sans-serif;
+                font-size: 26px;
+                font-weight: 800;
+                color: #FFFFFF;
+                margin-bottom: 5px;
+            }
+            .stButton>button {
+                background-color: #2563EB !important;
+                color: white !important;
+                border-radius: 8px !important;
+                border: none !important;
+                font-weight: 600 !important;
+                padding: 10px 20px !important;
+            }
+            .stButton>button:hover {
+                background-color: #1D4ED8 !important;
+                box-shadow: 0 4px 12px rgba(37, 99, 235, 0.3) !important;
+            }
+        </style>
+        
+        <div class="login-container">
+            <div class="login-title">🛡️ FraudGraph Shield Gateway</div>
+            <p style="color: rgba(255,255,255,0.6); margin-bottom: 15px; font-size:14px;">Investigator & Administrator Authentication Required</p>
+        </div>
+    """, unsafe_allow_html=True)
+
+    with st.container():
+        col_pad1, col_form, col_pad2 = st.columns([1, 2, 1])
+        with col_form:
+            with st.form("auth_login_form"):
+                username = st.text_input("Username", value="analyst", placeholder="e.g. analyst or admin")
+                password = st.text_input("Password", value="analyst_shield_2026" if username == "analyst" else "", type="password", placeholder="••••••••")
+                submitted = st.form_submit_button("Authenticate Access Key", use_container_width=True)
+
+            if submitted:
+                u_clean = username.lower().strip()
+                if st.session_state.get("use_demo", True):
+                    # Offline demo mode validation
+                    if u_clean == "analyst" and password == "analyst_shield_2026":
+                        st.session_state["jwt_token"] = "mock_analyst_token_2026"
+                        st.session_state["username"] = "analyst"
+                        st.session_state["role"] = "analyst"
+                        st.success("Demo Mode: Authenticated successfully!")
+                        time.sleep(0.5)
+                        st.rerun()
+                    elif u_clean == "admin" and password == "admin_shield_2026":
+                        st.session_state["jwt_token"] = "mock_admin_token_2026"
+                        st.session_state["username"] = "admin"
+                        st.session_state["role"] = "admin"
+                        st.success("Demo Mode: Authenticated as Admin successfully!")
+                        time.sleep(0.5)
+                        st.rerun()
+                    else:
+                        st.error("Invalid credentials (Demo Mode). Try: analyst / analyst_shield_2026")
+                else:
+                    # Live Mode backend validation
+                    res = login_api(u_clean, password)
+                    if res and "access_token" in res:
+                        st.session_state["jwt_token"] = res["access_token"]
+                        st.session_state["username"] = res["username"]
+                        st.session_state["role"] = res["role"]
+                        st.success("Authenticated successfully!")
+                        time.sleep(0.5)
+                        st.rerun()
+                    elif res and "error_detail" in res:
+                        st.error(res["error_detail"])
+                    else:
+                        st.error("Invalid username or password.")
+
+    st.stop()
+
+
+def _client_calculate_hash(index, timestamp, action, username, role, endpoint, hashed_id, prev_hash) -> str:
+    import hashlib
+    safe_hashed_id = hashed_id or ""
+    data_str = f"{index}|{timestamp}|{action}|{username}|{role}|{endpoint}|{safe_hashed_id}|{prev_hash}"
+    return hashlib.sha256(data_str.encode("utf-8")).hexdigest()
+
+def _get_mock_ledger() -> List[Dict]:
+    if "mock_ledger" not in st.session_state:
+        t1 = "2026-06-16 10:00:15"
+        t2 = "2026-06-16 10:15:30"
+        t3 = "2026-06-16 10:45:10"
+        
+        g_prev = "0000000000000000000000000000000000000000000000000000000000000000"
+        
+        h1 = _client_calculate_hash(1, t1, "INVESTIGATOR LOOKUP", "analyst", "analyst", "/vault/account", "f94d2a4c64b63897b2f671c61b17b6dc196a0cc012bd84092b3a0cc309b8c2e6", g_prev)
+        h2 = _client_calculate_hash(2, t2, "PROFILE CREATED", "admin", "admin", "/vault/account", "abc123xyz8b63897b2f671c61b17b6dc196a0cc012bd84092b3a0cc309b8c2e6", h1)
+        h3 = _client_calculate_hash(3, t3, "ALERT CREATED", "analyst", "analyst", "/vault/alert", "f94d2a4c64b63897b2f671c61b17b6dc196a0cc012bd84092b3a0cc309b8c2e6", h2)
+        
+        st.session_state["mock_ledger"] = [
+            {"log_index": 1, "timestamp": t1, "action": "INVESTIGATOR LOOKUP", "username": "analyst", "role": "analyst", "endpoint": "/vault/account", "hashed_id": "f94d2a4c64b63897b2f671c61b17b6dc196a0cc012bd84092b3a0cc309b8c2e6", "previous_hash": g_prev, "current_hash": h1},
+            {"log_index": 2, "timestamp": t2, "action": "PROFILE CREATED", "username": "admin", "role": "admin", "endpoint": "/vault/account", "hashed_id": "abc123xyz8b63897b2f671c61b17b6dc196a0cc012bd84092b3a0cc309b8c2e6", "previous_hash": h1, "current_hash": h2},
+            {"log_index": 3, "timestamp": t3, "action": "ALERT CREATED", "username": "analyst", "role": "analyst", "endpoint": "/vault/alert", "hashed_id": "f94d2a4c64b63897b2f671c61b17b6dc196a0cc012bd84092b3a0cc309b8c2e6", "previous_hash": h2, "current_hash": h3}
+        ]
+    return st.session_state["mock_ledger"]
+
+def _verify_mock_ledger() -> Dict:
+    ledger = _get_mock_ledger()
+    expected_prev = "0000000000000000000000000000000000000000000000000000000000000000"
+    for log in ledger:
+        if log["previous_hash"] != expected_prev:
+            return {
+                "verified": False,
+                "tampered_index": log["log_index"],
+                "reason": "Previous hash link broken (link mismatch)",
+                "expected": expected_prev,
+                "found": log["previous_hash"],
+                "record": log
+            }
+        calculated = _client_calculate_hash(
+            log["log_index"], log["timestamp"], log["action"], log["username"], log["role"], log["endpoint"], log["hashed_id"], log["previous_hash"]
+        )
+        if log["current_hash"] != calculated:
+            return {
+                "verified": False,
+                "tampered_index": log["log_index"],
+                "reason": "Log entry fields modified (content altered)",
+                "expected": calculated,
+                "found": log["current_hash"],
+                "record": log
+            }
+        expected_prev = log["current_hash"]
+    return {"verified": True, "total_records": len(ledger), "message": f"Cryptographic integrity verified across all {len(ledger)} entries."}
+
+def get_audit_logs() -> List[Dict]:
+    """Retrieves all cryptographic audit logs from backend or mock store."""
+    if st.session_state.get("use_demo", True):
+        return _get_mock_ledger()
+        
+    res = _get("/audit/logs")
+    if res is not None:
+        return res
+    return _get_mock_ledger()
+
+def verify_audit_chain() -> Dict:
+    """Verifies cryptographic audit log integrity."""
+    if st.session_state.get("use_demo", True):
+        return _verify_mock_ledger()
+        
+    res = _get("/audit/verify")
+    if res is not None:
+        return res
+    return _verify_mock_ledger()
+
+def simulate_audit_tampering(log_index: int) -> Dict:
+    """Simulates log tampering by modifying a username field inside a log record."""
+    if st.session_state.get("use_demo", True):
+        ledger = _get_mock_ledger()
+        for log in ledger:
+            if log["log_index"] == log_index:
+                log["username"] = "malicious_injected_user"
+                return {
+                    "success": True, 
+                    "message": f"Simulated tampering on record #{log_index} (Demo Mode).",
+                    "details": {"log_index": log_index, "original_username": "analyst" if log_index != 2 else "admin", "tampered_username": "malicious_injected_user"}
+                }
+        return {"success": False, "message": "Log index not found."}
+        
+    res = _post("/audit/simulate-tamper", {"log_index": log_index, "tampered_username": "malicious_injected_user"})
+    if res is not None:
+        return res
+        
+    # fallback
+    ledger = _get_mock_ledger()
+    for log in ledger:
+        if log["log_index"] == log_index:
+            log["username"] = "malicious_injected_user"
+            return {"success": True, "message": f"Fallback: Simulated tampering on record #{log_index}."}
+    return {"success": False}
+
+
 
 

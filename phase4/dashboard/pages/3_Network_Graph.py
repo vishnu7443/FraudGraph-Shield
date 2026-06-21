@@ -6,7 +6,7 @@
 import streamlit as st
 import streamlit.components.v1 as components
 from pyvis.network import Network
-from api_client import get_cluster
+from api_client import get_cluster, require_login
 from demo_data import DEMO_CLUSTERS, DEMO_SCORES
 import tempfile
 import os
@@ -20,6 +20,9 @@ st.set_page_config(
     page_icon="🕸️",
     layout="wide"
 )
+
+# Enforce JWT analyst login
+require_login()
 
 # Custom Global CSS for Dark Mode Glassmorphism
 st.markdown("""

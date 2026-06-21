@@ -6,12 +6,21 @@
 import streamlit as st
 import plotly.graph_objects as go
 import numpy as np
+import os
+import sys
+
+# Ensure imports work
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+from api_client import require_login
 
 st.set_page_config(
     page_title="System Monitor — FraudGraph Shield",
     page_icon="📊",
     layout="wide"
 )
+
+# Enforce JWT analyst login
+require_login()
 
 # Custom Global CSS for Dark Mode Glassmorphism
 st.markdown("""

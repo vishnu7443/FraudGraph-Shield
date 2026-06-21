@@ -11,7 +11,7 @@ import sys
 # Ensure imports work
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-from api_client import score_transaction
+from api_client import score_transaction, require_login
 from demo_data import DEMO_SCORES
 from components.score_gauge import render_score_gauge
 from components.shap_chart import render_shap_chart
@@ -21,6 +21,9 @@ st.set_page_config(
     page_icon="🔬",
     layout="wide"
 )
+
+# Enforce JWT analyst login
+require_login()
 
 # Custom Global CSS for Dark Mode Glassmorphism
 st.markdown("""

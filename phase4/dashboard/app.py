@@ -11,7 +11,7 @@ import sys
 # Add dashboard folder to path
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
-from api_client import health_check
+from api_client import health_check, require_login
 
 # Page Configuration
 st.set_page_config(
@@ -20,6 +20,9 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="expanded"
 )
+
+# Enforce JWT analyst login
+require_login()
 
 # Custom Global CSS for Dark Mode Glassmorphism
 st.markdown("""

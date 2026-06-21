@@ -1,6 +1,6 @@
 # phase3/api/routes/vault.py
 
-from fastapi import APIRouter, Request, HTTPException
+from fastapi import APIRouter, Request, HTTPException, Depends
 from pydantic import BaseModel, Field
 from typing import List, Optional
 import time
@@ -11,21 +11,37 @@ from services.profile_enrichment import get_enriched_profile_summary
 from models.vault_models import AccountProfile, VaultFraudAlert
 from vault.hash_utils import hash_account_id
 
+# Import security dependencies
+from api.middleware.auth_dep import get_current_active_user, RoleChecker
+
 router = APIRouter()
 logger = structlog.get_logger()
 
-# Helper function to write audit log entries
-def write_audit_log(action: str, hashed_id: str):
+# Helper function to write audit log entries with user context
+def write_audit_log(action: str, hashed_id: str, endpoint: str, user: dict):
     try:
         current_dir = os.path.dirname(os.path.abspath(__file__))
         log_dir = os.path.abspath(os.path.join(current_dir, "../../logs"))
         os.makedirs(log_dir, exist_ok=True)
         log_path = os.path.join(log_dir, "vault_access.log")
         
-        date_str = time.strftime("%Y-%m-%d", time.localtime())
-        log_line = f"{date_str} {action} hashed_id={hashed_id}\n"
+        date_str = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())
+        username = user.get("username", "unknown")
+        role = user.get("role", "unknown")
+        log_line = f"{date_str} action=\"{action}\" user={username} role={role} endpoint={endpoint} hashed_id={hashed_id}\n"
         with open(log_path, "a", encoding="utf-8") as f:
             f.write(log_line)
+            
+        # Append to tamper-proof database log chain
+        from vault.db import vault_db
+        vault_db.append_audit_log(
+            timestamp=date_str,
+            action=action,
+            username=username,
+            role=role,
+            endpoint=endpoint,
+            hashed_id=hashed_id
+        )
     except Exception as e:
         logger.error("audit_log_write_failed", error=str(e))
 
@@ -65,25 +81,27 @@ class UnifiedVaultResponse(BaseModel):
 
 
 @router.get("/vault/account/{hashed_id}", response_model=UnifiedVaultResponse)
-async def get_vault_account(hashed_id: str):
+async def get_vault_account(hashed_id: str, current_user: dict = Depends(get_current_active_user)):
     # Retrieve profile
     profile_data = cahv_service.get_profile(hashed_id)
     if not profile_data:
         raise HTTPException(status_code=404, detail="Account hash not found in vault")
     
     # Audit log access
-    write_audit_log("INVESTIGATOR LOOKUP", hashed_id)
+    write_audit_log("INVESTIGATOR LOOKUP", hashed_id, "/vault/account", current_user)
     
     # Retrieve alerts and enrich summary
     alerts = cahv_service.get_alerts(hashed_id)
     summary = get_enriched_profile_summary(hashed_id)
     
     # Map alerts to pydantic model format
+    is_analyst = current_user.get("role") == "analyst"
+    
     pydantic_alerts = []
     for a in alerts:
         pydantic_alerts.append(VaultFraudAlert(
             alert_id=a["alert_id"],
-            hashed_id=a["hashed_id"],
+            hashed_id="[REDACTED]" if is_analyst else a["hashed_id"],
             risk_score=a["risk_score"],
             alert_type=a["alert_type"],
             category=a["category"],
@@ -93,7 +111,7 @@ async def get_vault_account(hashed_id: str):
         ))
         
     pydantic_profile = AccountProfile(
-        hashed_id=profile_data["hashed_id"],
+        hashed_id="[REDACTED]" if is_analyst else profile_data["hashed_id"],
         name=profile_data["name"],
         phone=profile_data["phone"],
         pan=profile_data["pan"],
@@ -115,7 +133,11 @@ async def get_vault_account(hashed_id: str):
 
 
 @router.post("/vault/account", response_model=ProfileCreateResponse)
-async def create_vault_account(body: ProfileCreateRequest):
+async def create_vault_account(
+    body: ProfileCreateRequest, 
+    current_user: dict = Depends(RoleChecker(["admin"]))
+):
+    # Restricted to Admin
     success = cahv_service.create_profile(
         account_id=body.account_id,
         name=body.name,
@@ -127,13 +149,17 @@ async def create_vault_account(body: ProfileCreateRequest):
         raise HTTPException(status_code=500, detail="Failed to register customer profile in secure vault")
         
     hashed_id = hash_account_id(body.account_id)
-    write_audit_log("PROFILE CREATED", hashed_id)
+    write_audit_log("PROFILE CREATED", hashed_id, "/vault/account", current_user)
     
     return ProfileCreateResponse(success=True, hashed_id=hashed_id)
 
 
 @router.post("/vault/alert", response_model=AlertCreateResponse)
-async def create_vault_alert(body: AlertCreateRequest):
+async def create_vault_alert(
+    body: AlertCreateRequest, 
+    current_user: dict = Depends(get_current_active_user)
+):
+    # Access for both Analyst and Admin
     alert_id = cahv_service.create_alert(
         hashed_id=body.hashed_id,
         risk_score=body.risk_score,
@@ -145,21 +171,24 @@ async def create_vault_alert(body: AlertCreateRequest):
     if not alert_id:
         raise HTTPException(status_code=500, detail="Failed to log fraud alert in vault database")
         
-    write_audit_log("ALERT CREATED", body.hashed_id)
+    write_audit_log("ALERT CREATED", body.hashed_id, "/vault/alert", current_user)
     
     return AlertCreateResponse(success=True, alert_id=alert_id)
 
 
 @router.get("/vault/alerts/{hashed_id}", response_model=List[VaultFraudAlert])
-async def get_vault_alerts(hashed_id: str):
+async def get_vault_alerts(hashed_id: str, current_user: dict = Depends(get_current_active_user)):
+    # Access for both Analyst and Admin
     alerts = cahv_service.get_alerts(hashed_id)
-    write_audit_log("ALERTS HISTORY LOOKUP", hashed_id)
+    write_audit_log("ALERTS HISTORY LOOKUP", hashed_id, "/vault/alerts", current_user)
+    
+    is_analyst = current_user.get("role") == "analyst"
     
     pydantic_alerts = []
     for a in alerts:
         pydantic_alerts.append(VaultFraudAlert(
             alert_id=a["alert_id"],
-            hashed_id=a["hashed_id"],
+            hashed_id="[REDACTED]" if is_analyst else a["hashed_id"],
             risk_score=a["risk_score"],
             alert_type=a["alert_type"],
             category=a["category"],

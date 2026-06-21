@@ -15,7 +15,7 @@ if phase3_dir not in sys.path:
     sys.path.append(phase3_dir)
 
 # Import routes, engine, store and action engine
-from api.routes import score, cluster, health, crypto, vault
+from api.routes import score, cluster, health, crypto, vault, auth, audit
 from core.fusion_engine import RiskFusionEngine, resolve_path
 from core.feature_store import InMemoryFeatureStore
 from core.action_engine import ActionEngine
@@ -81,6 +81,8 @@ def create_app(
     application.include_router(health.router,  prefix="/api/v1", tags=["Health"])
     application.include_router(crypto.router,  prefix="/api/v1", tags=["Crypto"])
     application.include_router(vault.router,   prefix="/api/v1", tags=["Vault"])
+    application.include_router(auth.router,    prefix="/api/v1", tags=["Auth"])
+    application.include_router(audit.router,   prefix="/api/v1", tags=["Audit"])
 
     return application
 

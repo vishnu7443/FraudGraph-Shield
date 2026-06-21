@@ -15,13 +15,16 @@ import time
 # Ensure imports work
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-from api_client import get_vault_profile, create_vault_alert, get_vault_alerts
+from api_client import get_vault_profile, create_vault_alert, get_vault_alerts, require_login, get_audit_logs, verify_audit_chain, simulate_audit_tampering
 
 st.set_page_config(
     page_title="CAHV Vault — FraudGraph Shield",
     page_icon="🔒",
     layout="wide"
 )
+
+# Enforce JWT analyst login
+require_login()
 
 # Custom Global CSS for Dark Mode Glassmorphism
 st.markdown("""
@@ -90,32 +93,29 @@ with st.sidebar:
     st.subheader("🛠️ Investigator Utility Panel")
     st.divider()
     
-    # 1. Hashing converter utility
-    st.markdown("### 🔢 Account ID Hasher")
-    raw_acc_input = st.text_input("Raw Account ID", value="1247", help="Input bank account number to compute its SHA-256 query hash")
-    if raw_acc_input:
-        computed_hash = hashlib.sha256(raw_acc_input.strip().encode('utf-8')).hexdigest()
-        st.code(computed_hash, language="text")
-        st.caption("Double-click code to copy hash for lookup")
-        
-    st.divider()
-    
-    # 2. Simulator Actions Selector
+    # Simulator Actions Selector
     st.markdown("### ⚙️ Vault Simulator")
-    sim_action = st.selectbox("Choose Simulation", ["Lookup Search", "Register New Profile", "Submit Fraud Alert"])
+    role = st.session_state.get("role", "analyst")
+    if role == "admin":
+        sim_options = ["Lookup Search", "Register New Profile", "Submit Fraud Alert", "Cryptographic Audit Ledger"]
+    else:
+        sim_options = ["Lookup Search", "Submit Fraud Alert"]
+    
+    sim_action = st.selectbox("Choose Simulation", sim_options)
 
 # Main Flow Controller
 if sim_action == "Lookup Search":
     st.subheader("🔍 Investigator Account Search")
     
     # Main Search Input
-    search_hash = st.text_input(
-        "Enter SHA-256 Account Hash / Hashed ID", 
-        value=hashlib.sha256(b"1247").hexdigest(), 
-        placeholder="e.g. f94d2a4c..."
+    search_acc_num = st.text_input(
+        "Enter Account Number", 
+        value="1247", 
+        placeholder="e.g. 1247"
     ).strip()
     
-    if search_hash:
+    if search_acc_num:
+        search_hash = hashlib.sha256(search_acc_num.encode('utf-8')).hexdigest()
         with st.spinner("Decrypting vault records..."):
             case_data = get_vault_profile(search_hash)
             
@@ -150,11 +150,7 @@ if sim_action == "Lookup Search":
                     <h3 style='margin: 5px 0 15px 0; color:#FFFFFF;'>{profile.get("name", "Unknown")}</h3>
                     <table style='width:100%; border-collapse:collapse; color:#E2E8F0;'>
                         <tr>
-                            <td style='padding: 5px 0; font-weight:600; width:30%;'>Hashed ID:</td>
-                            <td style='padding: 5px 0; font-family:monospace; font-size:11px; word-break:break-all;'>{profile.get("hashed_id", "N/A")}</td>
-                        </tr>
-                        <tr>
-                            <td style='padding: 5px 0; font-weight:600;'>Account Number:</td>
+                            <td style='padding: 5px 0; font-weight:600; width:30%;'>Account Number:</td>
                             <td>{profile.get("account_id", "N/A")} (Vault Decrypted)</td>
                         </tr>
                         <tr>
@@ -191,7 +187,6 @@ if sim_action == "Lookup Search":
                     st.metric("Last Alert Date", display_date)
                     
                 st.divider()
-                st.info("⚠️ Accessing this profile registers a secure investigator query to the audit trail log file.")
                 
             st.divider()
             
@@ -250,59 +245,66 @@ if sim_action == "Lookup Search":
 
 elif sim_action == "Register New Profile":
     st.subheader("📝 Register New Secure Customer Profile")
-    st.markdown("Simulate the encryption of raw identity values into the database vault.")
     
-    with st.form("register_form"):
-        account_id = st.number_input("Account Node ID (Integer)", min_value=1000, max_value=999999, value=5042)
-        name = st.text_input("Full Name", value="Rajesh Kumar")
-        phone = st.text_input("Phone Number", value="+91 99887 76655")
-        pan = st.text_input("PAN Number", value="CRDKP4912J")
-        email = st.text_input("Email Address", value="rajesh.kumar@bankofindia.co.in")
+    if st.session_state.get("role") != "admin":
+        st.error("🚫 Access Denied: Only users with the 'admin' role are permitted to register new customer profiles in the vault.")
+    else:
+        st.markdown("Simulate the encryption of raw identity values into the database vault.")
         
-        submitted = st.form_submit_button("Encrypt & Register Profile")
-        
-        if submitted:
-            # We call our backend API client to register the profile
-            import httpx
-            from api_client import API_BASE
+        with st.form("register_form"):
+            account_id = st.number_input("Account Node ID (Integer)", min_value=1000, max_value=999999, value=5042)
+            name = st.text_input("Full Name", value="Rajesh Kumar")
+            phone = st.text_input("Phone Number", value="+91 99887 76655")
+            pan = st.text_input("PAN Number", value="CRDKP4912J")
+            email = st.text_input("Email Address", value="rajesh.kumar@bankofindia.co.in")
             
-            payload = {
-                "account_id": int(account_id),
-                "name": name,
-                "phone": phone,
-                "pan": pan,
-                "email": email
-            }
+            submitted = st.form_submit_button("Encrypt & Register Profile")
             
-            with st.spinner("Performing AES-256 encryption..."):
-                try:
-                    # Check if running offline
-                    if st.session_state.get("use_demo"):
-                        mock_hash = hashlib.sha256(str(account_id).strip().encode('utf-8')).hexdigest()
-                        st.success("Demo Mode: Profile encrypted and hashed successfully!")
-                        st.markdown(f"**Generated SHA-256 Lookup Key:** `{mock_hash}`")
-                        st.info("You can now search for this hash to retrieve your record.")
-                    else:
-                        resp = httpx.post(f"{API_BASE}/vault/account", json=payload, timeout=5.0)
-                        if resp.status_code == 200:
-                            data = resp.json()
-                            st.success("Success! Customer profile registered securely.")
-                            st.markdown(f"**Generated SHA-256 Lookup Key:** `{data['hashed_id']}`")
-                            st.info("Copy this hash to perform lookups.")
+            if submitted:
+                # We call our backend API client to register the profile
+                import httpx
+                from api_client import API_BASE
+                
+                payload = {
+                    "account_id": int(account_id),
+                    "name": name,
+                    "phone": phone,
+                    "pan": pan,
+                    "email": email
+                }
+                
+                with st.spinner("Performing AES-256 encryption..."):
+                    try:
+                        # Check if running offline
+                        if st.session_state.get("use_demo"):
+                            mock_hash = hashlib.sha256(str(account_id).strip().encode('utf-8')).hexdigest()
+                            st.success("Demo Mode: Profile encrypted and hashed successfully!")
+                            st.info(f"You can now search for account number '{account_id}' to retrieve your record.")
                         else:
-                            st.error(f"Backend registration failed: {resp.text}")
-                except Exception as e:
-                    st.error(f"Could not connect to API backend to register: {str(e)}")
+                            headers = {}
+                            if "jwt_token" in st.session_state and st.session_state["jwt_token"]:
+                                headers["Authorization"] = f"Bearer {st.session_state['jwt_token']}"
+                            resp = httpx.post(f"{API_BASE}/vault/account", json=payload, headers=headers, timeout=5.0)
+                            if resp.status_code == 200:
+                                data = resp.json()
+                                st.success("Success! Customer profile registered securely.")
+                                st.info(f"You can now search for account number '{account_id}' to perform lookups.")
+                            elif resp.status_code == 403:
+                                st.error("🚫 Operation Forbidden: Insufficient role permissions.")
+                            else:
+                                st.error(f"Backend registration failed: {resp.text}")
+                    except Exception as e:
+                        st.error(f"Could not connect to API backend to register: {str(e)}")
 
 elif sim_action == "Submit Fraud Alert":
     st.subheader("🚨 Report / Register Fraud Threat Alert")
     st.markdown("Trigger a secure alert entry tied to a specific customer's account hash.")
     
     with st.form("alert_form"):
-        hashed_id = st.text_input(
-            "Target Hashed ID (Account Hash)", 
-            value=hashlib.sha256(b"1247").hexdigest(),
-            help="Hashed lookup key of the customer"
+        target_acc_num = st.text_input(
+            "Target Account Number", 
+            value="1247",
+            help="Account number of the customer"
         )
         risk_score = st.slider("Risk Score (0-100)", min_value=0, max_value=100, value=85)
         alert_type = st.selectbox("Alert Code / Type", ["MULE_ACCOUNT", "CRYPTO_EXIT", "ACCOUNT_TAKEOVER", "SUSPICIOUS_PAYEE", "IDENTITY_THEFT"])
@@ -313,9 +315,10 @@ elif sim_action == "Submit Fraud Alert":
         submitted = st.form_submit_button("Submit Alert to Vault")
         
         if submitted:
+            hashed_id = hashlib.sha256(target_acc_num.strip().encode('utf-8')).hexdigest()
             with st.spinner("Submitting threat report to CAHV..."):
                 res = create_vault_alert(
-                    hashed_id=hashed_id.strip(),
+                    hashed_id=hashed_id,
                     risk_score=float(risk_score),
                     alert_type=alert_type,
                     category=category,
@@ -327,3 +330,66 @@ elif sim_action == "Submit Fraud Alert":
                     st.info("Look up this hashed ID again to see the updated metrics and timeline.")
                 else:
                     st.error("Failed to register alert. Please check backend connection.")
+
+elif sim_action == "Cryptographic Audit Ledger":
+    st.subheader("🛡️ Cryptographic Hash-Chained Audit Trail")
+    st.markdown("Inspect and verify the blockchain-like audit trail tracking access history, lookup logs, and registered alerts.")
+
+    # 1. Fetch ledger
+    logs = get_audit_logs()
+    
+    # 2. Main actions: Verify Chain & Tamper Simulator
+    col_verify, col_tamper = st.columns([1.5, 1])
+    
+    with col_verify:
+        st.markdown("### 🔍 Security Verification")
+        if st.button("⚡ Verify Chain Integrity", type="primary", use_container_width=True):
+            with st.spinner("Executing SHA-256 cryptographic sequence check..."):
+                res = verify_audit_chain()
+                if res.get("verified", False):
+                    st.success(f"🟢 **INTEGRITY VERIFIED**: {res.get('message', 'All links successfully matched.')}")
+                    st.toast("Verification Complete: Integrity Verified ✅")
+                else:
+                    st.error(f"🚨 **TAMPER DETECTED**: Chain verification failed at block index #{res.get('tampered_index')}!")
+                    st.markdown(f"**Reason**: `{res.get('reason')}`")
+                    st.markdown(f"**Expected Hash**: `{res.get('expected')}`")
+                    st.markdown(f"**Found/Stored Hash**: `{res.get('found')}`")
+                    st.json(res.get("record", {}))
+                    st.toast("Tampering Detected! ❌", icon="⚠️")
+                    
+    with col_tamper:
+        st.markdown("### ⚙️ Demo Tamper Simulator")
+        st.write("Simulate an unauthorized attack by modifying past database entries to test if the hashing checks identify it:")
+        if logs:
+            log_indices = [l["log_index"] for l in logs]
+            target_index = st.selectbox("Select Log Index to Tamper", options=log_indices)
+            if st.button("🔴 Inject Malicious Edit", use_container_width=True):
+                with st.spinner("Altering past log record..."):
+                    res = simulate_audit_tampering(target_index)
+                    if res.get("success"):
+                        st.warning(f"⚠️ **Tampering Successful!** Record #{target_index} modified. Click 'Verify Chain Integrity' to run the verification engine.")
+                        time.sleep(1.0)
+                        st.rerun()
+                    else:
+                        st.error("Failed to alter record.")
+        else:
+            st.info("No audit logs registered to simulate tampering.")
+
+    st.divider()
+    
+    # 3. Render ledger list
+    if logs:
+        st.markdown("### 📋 Cryptographic Log Ledger")
+        df_logs = pd.DataFrame(logs)
+        df_display = df_logs.copy()
+        
+        # Display nicely
+        st.dataframe(
+            df_display[[
+                "log_index", "timestamp", "action", "username", "role", "endpoint", "hashed_id", "previous_hash", "current_hash"
+            ]],
+            use_container_width=True,
+            hide_index=True
+        )
+    else:
+        st.info("No audit log records are currently registered.")

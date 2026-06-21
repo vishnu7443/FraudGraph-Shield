@@ -12,13 +12,16 @@ import sys
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from demo_data import DEMO_RISK_QUEUE
-from api_client import score_batch
+from api_client import score_batch, require_login
 
 st.set_page_config(
     page_title="Risk Queue — FraudGraph Shield",
     page_icon="📋",
     layout="wide"
 )
+
+# Enforce JWT analyst login
+require_login()
 
 # Custom Global CSS for Dark Mode Glassmorphism
 st.markdown("""
