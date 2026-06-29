@@ -1,2 +1,2 @@
 [tool.vercel]
-entrypoint = "api.main:app"
+entrypoint = "phase3.api.main:app"
