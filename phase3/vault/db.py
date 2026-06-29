@@ -9,10 +9,13 @@ logger = structlog.get_logger()
 class VaultDB:
     def __init__(self, db_path: Optional[str] = None):
         if not db_path:
-            current_dir = os.path.dirname(os.path.abspath(__file__))
-            storage_dir = os.path.abspath(os.path.join(current_dir, "../storage"))
-            os.makedirs(storage_dir, exist_ok=True)
-            db_path = os.path.join(storage_dir, "cahv.db")
+            if os.getenv("VERCEL"):
+                db_path = "/tmp/cahv.db"
+            else:
+                current_dir = os.path.dirname(os.path.abspath(__file__))
+                storage_dir = os.path.abspath(os.path.join(current_dir, "../storage"))
+                os.makedirs(storage_dir, exist_ok=True)
+                db_path = os.path.join(storage_dir, "cahv.db")
         self.db_path = db_path
         self._init_db()
 

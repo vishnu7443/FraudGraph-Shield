@@ -1,6 +1,7 @@
 import sqlite3
 import os
 import time
+# pyrefly: ignore [missing-import]
 import structlog
 from typing import List, Optional
 from models.crypto_alert import CryptoAlert
@@ -10,10 +11,13 @@ logger = structlog.get_logger()
 class CryptoAlertsDB:
     def __init__(self, db_path: Optional[str] = None):
         if not db_path:
-            current_dir = os.path.dirname(os.path.abspath(__file__))
-            storage_dir = os.path.abspath(os.path.join(current_dir, "../storage"))
-            os.makedirs(storage_dir, exist_ok=True)
-            db_path = os.path.join(storage_dir, "crypto_alerts.db")
+            if os.getenv("VERCEL"):
+                db_path = "/tmp/crypto_alerts.db"
+            else:
+                current_dir = os.path.dirname(os.path.abspath(__file__))
+                storage_dir = os.path.abspath(os.path.join(current_dir, "../storage"))
+                os.makedirs(storage_dir, exist_ok=True)
+                db_path = os.path.join(storage_dir, "crypto_alerts.db")
             
         self.db_path = db_path
         self._init_db()
