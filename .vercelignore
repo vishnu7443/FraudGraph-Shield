@@ -5,6 +5,7 @@ __pycache__
 phase4
 phase2/plots
 phase2/train_gnn.py
+phase2/models
 phase1/train.py
 phase1/data
 test_plots
