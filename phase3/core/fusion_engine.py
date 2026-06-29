@@ -72,27 +72,25 @@ class RiskFusionEngine:
 
         # Lazy imports of native libraries to prevent DLL initialization routines from failing on load
         import shap
-        from mule_detector import MuleGraphDetector
-
-        lgbm_path = resolve_path(os.getenv("LGBM_MODEL_PATH", "../phase1/models/lgbm_model.pkl"))
-        gnn_path = resolve_path(os.getenv("GNN_MODEL_PATH", "../phase2/models/gnn_model.pt"))
-        graph_path = resolve_path(os.getenv("GRAPH_DATA_PATH", "../phase2/models/graph_data.pt"))
-        feature_names_path = resolve_path("../phase1/models/feature_names.pkl")
-        scaler_path = resolve_path("../phase2/models/gnn_scaler.pkl")
-
-        logger.info("loading_fusion_engine_models", 
-                    lgbm_path=lgbm_path, 
-                    gnn_path=gnn_path, 
-                    graph_path=graph_path)
-
-        self.lgbm_model = joblib.load(lgbm_path)
-        self.lgbm_explainer = shap.TreeExplainer(self.lgbm_model)
-        self.feature_names = joblib.load(feature_names_path)
-        self.detector = MuleGraphDetector(
-            model_path=gnn_path,
-            scaler_path=scaler_path,
-            graph_path=graph_path
-        )
+        if os.getenv("VERCEL"):
+            logger.warning("Running on Vercel: Using Mock GNN Detector to avoid PyTorch 500MB limit")
+            class MockDetector:
+                def score_account(self, aid, f):
+                    import hashlib
+                    return float((int(hashlib.sha256(str(aid).encode()).hexdigest(), 16) % 80) / 100.0 + 0.1)
+                def get_cluster(self, aid, hop=2):
+                    return [aid + 1, aid + 2]
+            self.detector = MockDetector()
+        else:
+            from mule_detector import MuleGraphDetector
+            gnn_path = resolve_path(os.getenv("GNN_MODEL_PATH", "../phase2/models/gnn_model.pt"))
+            graph_path = resolve_path(os.getenv("GRAPH_DATA_PATH", "../phase2/models/graph_data.pt"))
+            scaler_path = resolve_path("../phase2/models/gnn_scaler.pkl")
+            self.detector = MuleGraphDetector(
+                model_path=gnn_path,
+                scaler_path=scaler_path,
+                graph_path=graph_path
+            )
         self.cfms_url = os.getenv("CFMS_MOCK_URL", "http://localhost:8001")
         logger.info("fusion_engine_initialized")
 
@@ -114,6 +112,9 @@ class RiskFusionEngine:
         """Assembles 74-dimensional GNN features from 300-dimensional preprocessed features."""
         if len(features) == 74:
             return features
+            
+        if os.getenv("VERCEL"):
+            return np.zeros(74)
             
         # Extract mean and scale from detector's scaler for unscaling
         mean = self.detector.scaler.mean_
