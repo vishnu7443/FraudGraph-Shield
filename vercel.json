@@ -1,14 +1,8 @@
 {
-  "builds": [
+  "rewrites": [
     {
-      "src": "phase3/api/main.py",
-      "use": "@vercel/python"
-    }
-  ],
-  "routes": [
-    {
-      "src": "/(.*)",
-      "dest": "phase3/api/main.py"
+      "source": "/(.*)",
+      "destination": "/api/index.py"
     }
   ]
 }
