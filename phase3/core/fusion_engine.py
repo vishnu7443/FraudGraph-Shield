@@ -92,11 +92,21 @@ class RiskFusionEngine:
                 graph_path=graph_path
             )
 
-        lgbm_path = resolve_path(os.getenv("LGBM_MODEL_PATH", "../phase1/models/lgbm_model.pkl"))
-        feature_names_path = resolve_path("../phase1/models/feature_names.pkl")
-        self.lgbm_model = joblib.load(lgbm_path)
-        self.feature_names = joblib.load(feature_names_path)
+        if os.getenv("VERCEL"):
+            logger.warning("Running on Vercel: Using Mock LGBM Model to avoid libgomp limit")
+            class MockLGBM:
+                def predict_proba(self, X):
+                    import numpy as np
+                    return np.array([[0.2, 0.8]])
+            self.lgbm_model = MockLGBM()
+            self.feature_names = ["mock_feature"] * 300
+        else:
+            lgbm_path = resolve_path(os.getenv("LGBM_MODEL_PATH", "../phase1/models/lgbm_model.pkl"))
+            feature_names_path = resolve_path("../phase1/models/feature_names.pkl")
+            self.lgbm_model = joblib.load(lgbm_path)
+            self.feature_names = joblib.load(feature_names_path)
         
+
         self.cfms_url = os.getenv("CFMS_MOCK_URL", "http://localhost:8001")
         logger.info("fusion_engine_initialized")
 

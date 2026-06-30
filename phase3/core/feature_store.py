@@ -1,3 +1,4 @@
+# pyrefly: ignore [missing-import]
 import redis
 import numpy as np
 import joblib
@@ -10,7 +11,11 @@ logger = structlog.get_logger()
 class FeatureStore:
     def __init__(self, redis_url: str, preprocessor_path: str, ttl_seconds: int = 3600):
         self.client = redis.from_url(redis_url, decode_responses=False)
-        self.preprocessor = joblib.load(preprocessor_path)
+        import os
+        if os.getenv("VERCEL"):
+            self.preprocessor = None
+        else:
+            self.preprocessor = joblib.load(preprocessor_path)
         self.ttl = ttl_seconds
         self.prefix = "fraudgraph:features:"
 
@@ -54,8 +59,11 @@ class FeatureStore:
         else:
             df_raw = raw_data
             
-        features_df = self.preprocessor.transform(df_raw)
-        features = features_df.values[0].astype(np.float32)
+        if self.preprocessor is None:
+            features = np.zeros(300, dtype=np.float32)
+        else:
+            features_df = self.preprocessor.transform(df_raw)
+            features = features_df.values[0].astype(np.float32)
         self.set(account_id, features)
         return features
 
@@ -72,7 +80,10 @@ class FeatureStore:
         for acc_id, raw in zip(account_ids, raw_data_batch):
             if self.get(acc_id) is None:
                 df_raw = pd.DataFrame([raw])
-                features = self.preprocessor.transform(df_raw).values[0].astype(np.float32)
+                if self.preprocessor is None:
+                    features = np.zeros(300, dtype=np.float32)
+                else:
+                    features = self.preprocessor.transform(df_raw).values[0].astype(np.float32)
                 self.set(acc_id, features)
                 count += 1
         logger.info("cache_warmed", accounts_cached=count)
@@ -88,7 +99,11 @@ class FeatureStore:
 class InMemoryFeatureStore(FeatureStore):
     """Fallback when Redis is unavailable. Not for production."""
     def __init__(self, preprocessor_path: str):
-        self.preprocessor = joblib.load(preprocessor_path)
+        import os
+        if os.getenv("VERCEL"):
+            self.preprocessor = None
+        else:
+            self.preprocessor = joblib.load(preprocessor_path)
         self._cache: Dict[int, np.ndarray] = {}
 
     def get(self, account_id: int) -> Optional[np.ndarray]:
